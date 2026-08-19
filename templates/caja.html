@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% set active = "caja" %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h4 class="fw-bold mb-0"><i class="bi bi-cash-coin me-2 text-celeste-o"></i>Caja</h4>
+  <input type="date" class="form-control form-control-sm" id="fecha-caja" style="width:160px"/>
+</div>
+
+<!-- Resumen del día -->
+<div class="row g-3 mb-4" id="cards-dia"></div>
+
+<!-- Detalle reservas del día -->
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card p-3">
+      <h6 class="fw-bold mb-3"><i class="bi bi-calendar-check me-1"></i>Reservas del día</h6>
+      <div id="detalle-reservas"></div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card p-3 mb-3">
+      <h6 class="fw-bold mb-2"><i class="bi bi-bar-chart me-1"></i>Top productos bufet</h6>
+      <div id="top-productos"></div>
+    </div>
+    <div class="card p-3">
+      <h6 class="fw-bold mb-2"><i class="bi bi-graph-up me-1"></i>Resumen semanal</h6>
+      <div id="resumen-semanal"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const DIAS = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
+document.addEventListener("DOMContentLoaded", () => {
+  const hoy = new Date().toISOString().slice(0,10);
+  document.getElementById("fecha-caja").value = hoy;
+  document.getElementById("fecha-caja").addEventListener("change", cargarCaja);
+  cargarCaja();
+});
+
+async function cargarCaja() {
+  const fecha = document.getElementById("fecha-caja").value;
+  const res = await fetch(`/api/caja?fecha=${fecha}`);
+  const data = await res.json();
+  renderCards(data);
+  renderReservas(data, fecha);
+  renderTopProductos(data.top_productos);
+  cargarSemanal(fecha);
+}
+
+function fmt(n) { return Number(n||0).toLocaleString("es-AR"); }
+
+function renderCards(d) {
+  const c = d.canchas, b = d.bufet;
+  document.getElementById("cards-dia").innerHTML = `
+    <div class="col-6 col-md-3">
+      <div class="card p-3 text-center">
+        <div class="fs-2 fw-bold text-celeste-o">$${fmt(c.cobrado)}</div>
+        <div class="small text-muted">Cobrado canchas</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card p-3 text-center">
+        <div class="fs-2 fw-bold text-warning">${c.seniados||0}</div>
+        <div class="small text-muted">Turnos señados</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card p-3 text-center">
+        <div class="fs-2 fw-bold text-celeste-o">$${fmt(b.total_bufet)}</div>
+        <div class="small text-muted">Ingresos bufet</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="total-highlight text-center">
+        <div class="fs-2 fw-bold">$${fmt(d.total_dia)}</div>
+        <div class="small opacity-75">Total del día</div>
+      </div>
+    </div>
+    ${d.pendiente_cobro>0 ? `
+    <div class="col-12">
+      <div class="alert alert-warning d-flex align-items-center gap-2 py-2 mb-0">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <span>Pendiente de cobro (señas): <strong>$${fmt(d.pendiente_cobro)}</strong></span>
+      </div>
+    </div>` : ''}`;
+}
+
+async function renderReservas(data, fecha) {
+  const res = await fetch(`/api/agenda?semana=${fecha}`);
+  const ag = await res.json();
+  const hoyRes = ag.reservas.filter(r => r.fecha === fecha && r.estado !== 'cancelado');
+  const est = {señado:"warning",pagado:"success",no_vino:"danger"};
+  const html = hoyRes.map(r => `
+    <div class="d-flex justify-content-between align-items-center border-bottom py-2 small">
+      <span><strong>${r.hora}hs C${r.cancha}</strong> · ${r.cliente_nombre}</span>
+      <div class="d-flex gap-3 align-items-center">
+        <span class="text-muted">$${fmt(r.monto_pagado)} cobrado</span>
+        <span class="badge bg-${est[r.estado]||'secondary'}">${r.estado}</span>
+      </div>
+    </div>`).join("") || '<p class="text-muted text-center py-3">Sin reservas</p>';
+  document.getElementById("detalle-reservas").innerHTML = html;
+}
+
+function renderTopProductos(top) {
+  if (!top || !top.length) {
+    document.getElementById("top-productos").innerHTML = '<p class="text-muted small">Sin ventas</p>';
+    return;
+  }
+  const max = top[0].total;
+  document.getElementById("top-productos").innerHTML = top.map(p => `
+    <div class="mb-2">
+      <div class="d-flex justify-content-between small mb-1">
+        <span>${p.producto_nombre}</span><span class="text-celeste-o fw-semibold">$${fmt(p.total)}</span>
+      </div>
+      <div class="progress" style="height:6px">
+        <div class="progress-bar bg-celeste" style="width:${(p.total/max*100).toFixed(0)}%"></div>
+      </div>
+    </div>`).join("");
+}
+
+async function cargarSemanal(fecha) {
+  // semana del martes al domingo
+  const d = new Date(fecha+"T00:00:00");
+  const dia = d.getDay();
+  const diasDesdeMartes = (dia - 2 + 7) % 7;
+  const martes = new Date(d); martes.setDate(d.getDate()-diasDesdeMartes);
+  const domingo = new Date(martes); domingo.setDate(martes.getDate()+6);
+  const desde = martes.toISOString().slice(0,10);
+  const hasta = domingo.toISOString().slice(0,10);
+
+  const res = await fetch(`/api/caja/semana?desde=${desde}&hasta=${hasta}`);
+  const datos = await res.json();
+  if (!datos.length) { document.getElementById("resumen-semanal").innerHTML = '<p class="text-muted small">Sin datos</p>'; return; }
+
+  const maxVal = Math.max(...datos.map(x => x.total)) || 1;
+  document.getElementById("resumen-semanal").innerHTML = datos.map(x => {
+    const dd = new Date(x.fecha+"T00:00:00");
+    const pct = (x.total/maxVal*100).toFixed(0);
+    return `<div class="mb-2">
+      <div class="d-flex justify-content-between small mb-1">
+        <span class="fw-semibold">${DIAS[dd.getDay()]} ${dd.getDate()}</span>
+        <span class="text-celeste-o">$${fmt(x.total)}</span>
+      </div>
+      <div class="progress" style="height:8px">
+        <div class="progress-bar bg-celeste" title="Canchas $${fmt(x.canchas)}" style="width:${pct}%"></div>
+      </div>
+    </div>`;
+  }).join("");
+}
+</script>
+{% endblock %}

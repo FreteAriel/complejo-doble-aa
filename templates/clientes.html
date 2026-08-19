@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% set active = "clientes" %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h4 class="fw-bold mb-0"><i class="bi bi-people me-2 text-celeste-o"></i>Clientes</h4>
+  <button class="btn btn-celeste btn-sm" data-bs-toggle="modal" data-bs-target="#modalCliente" onclick="nuevoCliente()">
+    <i class="bi bi-person-plus me-1"></i>Nuevo cliente
+  </button>
+</div>
+
+<div class="card p-3 mb-3">
+  <div class="input-group">
+    <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+    <input type="text" class="form-control border-start-0" id="buscador" placeholder="Buscar por nombre..."/>
+  </div>
+</div>
+
+<div class="card p-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Nombre</th>
+          <th>Teléfono</th>
+          <th>Notas</th>
+          <th class="text-center">Historial</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tabla-clientes"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal cliente -->
+<div class="modal fade" id="modalCliente" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header border-0">
+        <h5 class="modal-title fw-bold" id="titulo-cliente">Nuevo Cliente</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="cl-id"/>
+        <div class="mb-2">
+          <label class="form-label fw-semibold">Nombre completo</label>
+          <input type="text" class="form-control" id="cl-nombre"/>
+        </div>
+        <div class="mb-2">
+          <label class="form-label fw-semibold">Teléfono / WhatsApp</label>
+          <input type="text" class="form-control" id="cl-tel" placeholder="+549..."/>
+        </div>
+        <div class="mb-2">
+          <label class="form-label fw-semibold">Notas</label>
+          <textarea class="form-control" id="cl-notas" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-celeste btn-sm" onclick="guardarCliente()">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal historial -->
+<div class="modal fade" id="modalHistorial" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header border-0">
+        <h5 class="modal-title fw-bold" id="titulo-historial">Historial</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="cuerpo-historial"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let modalClBS, modalHistBS;
+const DIAS = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+
+document.addEventListener("DOMContentLoaded", () => {
+  modalClBS   = new bootstrap.Modal(document.getElementById("modalCliente"));
+  modalHistBS = new bootstrap.Modal(document.getElementById("modalHistorial"));
+  cargarClientes();
+  let timer;
+  document.getElementById("buscador").addEventListener("input", e => {
+    clearTimeout(timer);
+    timer = setTimeout(() => cargarClientes(e.target.value), 250);
+  });
+});
+
+async function cargarClientes(q="") {
+  const res = await fetch(`/api/clientes?q=${encodeURIComponent(q)}`);
+  const lista = await res.json();
+  document.getElementById("tabla-clientes").innerHTML = lista.map(c =>
+    `<tr>
+      <td class="fw-semibold">${c.nombre}</td>
+      <td>${c.telefono ? `<a href="https://wa.me/${c.telefono.replace(/\D/g,'')}" target="_blank" class="text-celeste-o"><i class="bi bi-whatsapp me-1"></i>${c.telefono}</a>` : '<span class="text-muted">-</span>'}</td>
+      <td class="text-muted small">${c.notas||'-'}</td>
+      <td class="text-center">
+        <button class="btn btn-outline-secondary btn-sm py-0" onclick="verHistorial(${c.id},'${c.nombre.replace(/'/g,"\\'")}')">
+          <i class="bi bi-clock-history"></i>
+        </button>
+      </td>
+      <td class="text-end">
+        <button class="btn btn-outline-celeste btn-sm py-0" onclick="editarCliente(${c.id},'${c.nombre.replace(/'/g,"\\'")}','${(c.telefono||'').replace(/'/g,"\\'")}','${(c.notas||'').replace(/'/g,"\\'")}')">
+          <i class="bi bi-pencil"></i>
+        </button>
+      </td>
+    </tr>`
+  ).join("") || `<tr><td colspan="5" class="text-center text-muted py-4">Sin resultados</td></tr>`;
+}
+
+function nuevoCliente() {
+  document.getElementById("cl-id").value="";
+  document.getElementById("cl-nombre").value="";
+  document.getElementById("cl-tel").value="";
+  document.getElementById("cl-notas").value="";
+  document.getElementById("titulo-cliente").textContent="Nuevo Cliente";
+}
+
+function editarCliente(id,nombre,tel,notas) {
+  document.getElementById("cl-id").value=id;
+  document.getElementById("cl-nombre").value=nombre;
+  document.getElementById("cl-tel").value=tel;
+  document.getElementById("cl-notas").value=notas;
+  document.getElementById("titulo-cliente").textContent="Editar Cliente";
+  modalClBS.show();
+}
+
+async function guardarCliente() {
+  const id = document.getElementById("cl-id").value;
+  const body = {
+    nombre: document.getElementById("cl-nombre").value.trim(),
+    telefono: document.getElementById("cl-tel").value.trim(),
+    notas: document.getElementById("cl-notas").value.trim()
+  };
+  if (!body.nombre) { alert("Ingresá el nombre"); return; }
+  const url = id ? `/api/clientes/${id}` : "/api/clientes";
+  await fetch(url, {method: id?"PUT":"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  modalClBS.hide();
+  cargarClientes(document.getElementById("buscador").value);
+}
+
+async function verHistorial(id, nombre) {
+  const res = await fetch(`/api/clientes/${id}/historial`);
+  const data = await res.json();
+  document.getElementById("titulo-historial").textContent = `Historial — ${nombre}`;
+  const est = {señado:"warning",pagado:"success",no_vino:"danger",cancelado:"secondary"};
+  const html = data.reservas.length ? data.reservas.map(r => {
+    const d = new Date(r.fecha+"T00:00:00");
+    return `<div class="d-flex justify-content-between border-bottom py-2 small">
+      <span><strong>${DIAS[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}</strong> · ${r.hora}hs · Cancha ${r.cancha}</span>
+      <div class="d-flex gap-3 align-items-center">
+        ${r.monto_pagado>0?`<span class="text-muted">Cobrado $${r.monto_pagado.toLocaleString("es-AR")}</span>`:''}
+        <span class="badge bg-${est[r.estado]||'secondary'}">${r.estado}</span>
+      </div>
+    </div>`;
+  }).join("") : '<p class="text-muted text-center py-3">Sin reservas registradas</p>';
+  document.getElementById("cuerpo-historial").innerHTML = html;
+  modalHistBS.show();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Complejo Doble AA</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --celeste:        #4AADDC;
+      --celeste-oscuro: #2790C0;
+      --celeste-claro:  #D6EFFA;
+      --celeste-fondo:  #EBF6FD;
+      --blanco:         #ffffff;
+      --negro:          #111111;
+      --gris-texto:     #444444;
+      --gris-suave:     #F4F8FB;
+      --borde:          #D0E8F5;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      background: var(--celeste-fondo);
+      font-family: 'Inter', 'Segoe UI', sans-serif;
+      color: var(--negro);
+    }
+
+    /* ── Navbar ───────────────────────────── */
+    .navbar { background: var(--celeste) !important; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+    .navbar-brand {
+      font-weight: 800; font-size: 1.25rem; letter-spacing: .5px;
+      color: var(--blanco) !important;
+    }
+    .navbar-brand span { color: var(--blanco); opacity: .85; font-weight: 400; font-size: .95rem; }
+    .navbar a.nav-link { color: var(--blanco) !important; font-weight: 600; opacity: .88; }
+    .navbar a.nav-link.active,
+    .navbar a.nav-link:hover { opacity: 1; color: var(--blanco) !important;
+      border-bottom: 2px solid var(--blanco); }
+    .navbar-toggler { border: none; }
+
+    /* ── Cards ───────────────────────────── */
+    .card {
+      border: 1px solid var(--borde);
+      border-radius: 14px;
+      box-shadow: 0 2px 10px rgba(74,173,220,.10);
+      background: var(--blanco);
+    }
+
+    /* ── Botones ─────────────────────────── */
+    .btn-celeste {
+      background: var(--celeste); color: var(--blanco) !important;
+      border: none; font-weight: 700;
+    }
+    .btn-celeste:hover { background: var(--celeste-oscuro); color: var(--blanco) !important; }
+    .btn-outline-celeste {
+      border: 2px solid var(--celeste); color: var(--celeste) !important;
+      background: transparent; font-weight: 700;
+    }
+    .btn-outline-celeste:hover { background: var(--celeste-claro); }
+
+    /* ── Badges de estado ────────────────── */
+    .badge-libre     { background: var(--celeste-claro); color: var(--celeste-oscuro); font-weight:700; border-radius:6px; padding:3px 8px; }
+    .badge-señado    { background: #FFF3CD; color: #7A5A00; font-weight:700; border-radius:6px; padding:3px 8px; }
+    .badge-pagado    { background: #D6FAE8; color: #0A6B35; font-weight:700; border-radius:6px; padding:3px 8px; }
+    .badge-no_vino   { background: #FFE0E0; color: #9B1C1C; font-weight:700; border-radius:6px; padding:3px 8px; }
+    .badge-cancelado { background: #EBEBEB; color: #555; font-weight:700; border-radius:6px; padding:3px 8px; }
+
+    /* ── Turnos agenda ───────────────────── */
+    .turno-card {
+      cursor: pointer; border-radius: 10px; padding: 8px 12px;
+      font-size: .82rem; transition: .15s; border-left: 4px solid transparent;
+      color: var(--negro);
+    }
+    .turno-card:hover { filter: brightness(.94); }
+    .turno-libre    { background: var(--celeste-claro); border-left-color: var(--celeste); }
+    .turno-señado   { background: #FFF9E6; border-left-color: #F0B429; }
+    .turno-pagado   { background: #D6FAE8; border-left-color: #1DB954; }
+    .turno-no_vino  { background: #FFE0E0; border-left-color: #E53E3E; }
+    .turno-cancelado{ background: #EBEBEB; border-left-color: #AAAAAA; }
+
+    /* ── Hora label ──────────────────────── */
+    .hora-label { font-weight: 800; font-size: .9rem; color: var(--celeste-oscuro); min-width: 48px; }
+
+    /* ── Highlight total ─────────────────── */
+    .total-highlight {
+      background: var(--celeste); color: var(--blanco);
+      border-radius: 12px; padding: 14px 20px;
+    }
+
+    /* ── Títulos de sección ──────────────── */
+    h4.fw-bold { color: var(--negro); }
+    h6.fw-bold { color: var(--negro); }
+
+    /* ── Tabla ───────────────────────────── */
+    .table thead th { background: var(--celeste-claro); color: var(--negro); font-weight: 700; border-color: var(--borde); }
+    .table td { border-color: var(--borde); color: var(--negro); vertical-align: middle; }
+    .table-hover tbody tr:hover td { background: var(--celeste-fondo); }
+
+    /* ── Form controls ───────────────────── */
+    .form-control:focus, .form-select:focus {
+      border-color: var(--celeste);
+      box-shadow: 0 0 0 3px rgba(74,173,220,.20);
+    }
+
+    /* ── Progress bar ────────────────────── */
+    .progress-bar { background: var(--celeste) !important; }
+
+    /* ── Alerts ──────────────────────────── */
+    .alert-warning { background: #FFF8E1; border-color: #F0B429; color: var(--negro); }
+
+    /* ── Navbar activo subrayado ─────────── */
+    .nav-link.active { border-bottom: 2px solid #fff; }
+
+    /* ── Utilitarios custom ──────────────── */
+    .text-celeste-o { color: var(--celeste-oscuro) !important; }
+    .bg-celeste     { background-color: var(--celeste) !important; }
+
+    @media(max-width:768px) { .turno-card { font-size:.75rem; padding:6px 8px; } }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+<nav class="navbar navbar-expand-lg mb-0">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="/">
+      <i class="bi bi-circle-fill me-1" style="color:#fff;opacity:.7;font-size:.7rem"></i>
+      <i class="bi bi-circle-fill me-2" style="color:#fff;opacity:.7;font-size:.7rem"></i>Complejo Doble AA
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
+      <i class="bi bi-list text-white fs-4"></i>
+    </button>
+    <div class="collapse navbar-collapse" id="nav">
+      <ul class="navbar-nav ms-auto gap-1">
+        <li class="nav-item"><a class="nav-link {% if active=='agenda' %}active{% endif %}" href="/agenda"><i class="bi bi-calendar3 me-1"></i>Agenda</a></li>
+        <li class="nav-item"><a class="nav-link {% if active=='bufet' %}active{% endif %}" href="/bufet"><i class="bi bi-cup-straw me-1"></i>Bufet</a></li>
+        <li class="nav-item"><a class="nav-link {% if active=='clientes' %}active{% endif %}" href="/clientes"><i class="bi bi-people me-1"></i>Clientes</a></li>
+        <li class="nav-item"><a class="nav-link {% if active=='caja' %}active{% endif %}" href="/caja"><i class="bi bi-cash-coin me-1"></i>Caja</a></li>
+      </ul>
+    </div>
+  </div>
+</nav>
+<div class="container-fluid py-3 px-3 px-md-4">
+  {% block content %}{% endblock %}
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

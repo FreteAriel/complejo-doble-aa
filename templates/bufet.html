@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% set active = "bufet" %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h4 class="fw-bold mb-0"><i class="bi bi-cup-straw me-2 text-celeste-o"></i>Bufet</h4>
+  <div class="d-flex gap-2">
+    <input type="date" class="form-control form-control-sm" id="fecha-bufet" style="width:160px"/>
+    <button class="btn btn-celeste btn-sm" data-bs-toggle="modal" data-bs-target="#modalVenta">
+      <i class="bi bi-cart-plus me-1"></i>Nueva venta
+    </button>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Ventas del día -->
+  <div class="col-lg-7">
+    <div class="card p-3">
+      <h6 class="fw-bold mb-3"><i class="bi bi-receipt me-1"></i>Ventas del día</h6>
+      <div id="lista-ventas">
+        <div class="text-center text-muted py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>Sin ventas registradas</div>
+      </div>
+      <div class="border-top pt-2 mt-2 d-flex justify-content-between fw-bold">
+        <span>Total del día:</span>
+        <span class="text-celeste-o" id="total-dia-bufet">$0</span>
+      </div>
+    </div>
+  </div>
+  <!-- Productos / stock -->
+  <div class="col-lg-5">
+    <div class="card p-3">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-box-seam me-1"></i>Productos</h6>
+        <button class="btn btn-outline-celeste btn-sm" data-bs-toggle="modal" data-bs-target="#modalProducto" onclick="nuevoProd()">
+          <i class="bi bi-plus"></i>
+        </button>
+      </div>
+      <div id="lista-productos"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal venta -->
+<div class="modal fade" id="modalVenta" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0">
+        <h5 class="modal-title fw-bold"><i class="bi bi-cart me-2"></i>Registrar Venta</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="items-venta"></div>
+        <button class="btn btn-outline-celeste btn-sm w-100 mt-2" onclick="agregarItemVenta()">
+          <i class="bi bi-plus me-1"></i>Agregar producto
+        </button>
+        <div class="border-top mt-3 pt-2 d-flex justify-content-between fw-bold fs-5">
+          <span>Total:</span><span class="text-celeste-o" id="total-venta">$0</span>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-celeste" onclick="confirmarVenta()"><i class="bi bi-check2 me-1"></i>Confirmar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal producto -->
+<div class="modal fade" id="modalProducto" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header border-0">
+        <h5 class="modal-title fw-bold" id="titulo-prod">Nuevo Producto</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="prod-id"/>
+        <div class="mb-2">
+          <label class="form-label fw-semibold">Nombre</label>
+          <input type="text" class="form-control" id="prod-nombre"/>
+        </div>
+        <div class="mb-2">
+          <label class="form-label fw-semibold">Categoría</label>
+          <select class="form-select" id="prod-cat">
+            <option value="bebida">Bebida</option>
+            <option value="minuta">Minuta</option>
+            <option value="snack">Snack</option>
+            <option value="otro">Otro</option>
+          </select>
+        </div>
+        <div class="mb-2">
+          <label class="form-label fw-semibold">Precio ($)</label>
+          <input type="number" class="form-control" id="prod-precio"/>
+        </div>
+        <div class="mb-2">
+          <label class="form-label fw-semibold">Stock</label>
+          <input type="number" class="form-control" id="prod-stock" value="0"/>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-celeste btn-sm" onclick="guardarProducto()">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let productos = [];
+let modalVentaBS, modalProdBS;
+
+document.addEventListener("DOMContentLoaded", () => {
+  const hoy = new Date().toISOString().slice(0,10);
+  document.getElementById("fecha-bufet").value = hoy;
+  document.getElementById("fecha-bufet").addEventListener("change", () => {
+    cargarVentas(); agregarItemVenta_reset();
+  });
+  modalVentaBS = new bootstrap.Modal(document.getElementById("modalVenta"));
+  modalProdBS  = new bootstrap.Modal(document.getElementById("modalProducto"));
+  cargarProductos();
+  cargarVentas();
+  agregarItemVenta();
+});
+
+async function cargarProductos() {
+  const res = await fetch("/api/productos");
+  productos = await res.json();
+  renderProductos();
+}
+
+function renderProductos() {
+  const cats = {};
+  for (const p of productos) {
+    (cats[p.categoria] = cats[p.categoria]||[]).push(p);
+  }
+  const iconos = {bebida:"bi-cup-straw",minuta:"bi-egg-fried",snack:"bi-bag",otro:"bi-box"};
+  let html = "";
+  for (const [cat, prods] of Object.entries(cats)) {
+    html += `<div class="mb-2"><div class="text-uppercase text-muted small fw-bold mb-1"><i class="bi ${iconos[cat]||'bi-box'} me-1"></i>${cat}</div>`;
+    for (const p of prods) {
+      html += `<div class="d-flex justify-content-between align-items-center border-bottom py-1">
+        <span class="small">${p.nombre} ${p.stock>0?`<span class="badge bg-secondary">${p.stock}</span>`:''}</span>
+        <div class="d-flex align-items-center gap-2">
+          <span class="text-celeste-o fw-semibold small">$${p.precio.toLocaleString("es-AR")}</span>
+          <button class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="editarProd(${p.id})"><i class="bi bi-pencil" style="font-size:.7rem"></i></button>
+        </div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  document.getElementById("lista-productos").innerHTML = html || '<p class="text-muted small">Sin productos</p>';
+}
+
+async function cargarVentas() {
+  const fecha = document.getElementById("fecha-bufet").value;
+  const res = await fetch(`/api/ventas?fecha=${fecha}`);
+  const ventas = await res.json();
+  let total = 0;
+  let html = ventas.map(v => {
+    total += v.total;
+    return `<div class="d-flex justify-content-between border-bottom py-1 small">
+      <span>${v.producto_nombre} x${v.cantidad}</span>
+      <span class="text-celeste-o">$${v.total.toLocaleString("es-AR")}</span>
+    </div>`;
+  }).join("");
+  document.getElementById("lista-ventas").innerHTML = html || '<div class="text-center text-muted py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>Sin ventas</div>';
+  document.getElementById("total-dia-bufet").textContent = "$" + total.toLocaleString("es-AR");
+}
+
+let itemsVenta = [];
+function agregarItemVenta() { itemsVenta.push({producto_id:"",cantidad:1}); renderItemsVenta(); }
+function agregarItemVenta_reset() { itemsVenta = [{producto_id:"",cantidad:1}]; renderItemsVenta(); }
+
+function renderItemsVenta() {
+  const opts = productos.map(p => `<option value="${p.id}" data-precio="${p.precio}">${p.nombre} ($${p.precio.toLocaleString("es-AR")})</option>`).join("");
+  document.getElementById("items-venta").innerHTML = itemsVenta.map((item, i) =>
+    `<div class="row g-2 mb-2 align-items-center">
+      <div class="col-7">
+        <select class="form-select form-select-sm" onchange="setItem(${i},'producto_id',this.value)">
+          <option value="">-- Elegir --</option>${opts}
+        </select>
+      </div>
+      <div class="col-3">
+        <input type="number" min="1" value="${item.cantidad}" class="form-control form-control-sm"
+          onchange="setItem(${i},'cantidad',+this.value)"/>
+      </div>
+      <div class="col-2 text-end">
+        <button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="quitarItem(${i})"><i class="bi bi-trash"></i></button>
+      </div>
+    </div>`
+  ).join("");
+  calcTotalVenta();
+}
+
+function setItem(i, campo, val) {
+  itemsVenta[i][campo] = val;
+  calcTotalVenta();
+}
+function quitarItem(i) { itemsVenta.splice(i,1); if(!itemsVenta.length) itemsVenta.push({producto_id:"",cantidad:1}); renderItemsVenta(); }
+function calcTotalVenta() {
+  let total = 0;
+  for (const item of itemsVenta) {
+    const p = productos.find(x => x.id == item.producto_id);
+    if (p) total += p.precio * item.cantidad;
+  }
+  document.getElementById("total-venta").textContent = "$" + total.toLocaleString("es-AR");
+}
+
+async function confirmarVenta() {
+  const items = itemsVenta.filter(i => i.producto_id);
+  if (!items.length) { alert("Seleccioná al menos un producto"); return; }
+  const fecha = document.getElementById("fecha-bufet").value;
+  await fetch("/api/ventas", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({items, fecha})
+  });
+  modalVentaBS.hide();
+  agregarItemVenta_reset();
+  cargarVentas();
+  cargarProductos();
+}
+
+function nuevoProd() {
+  document.getElementById("prod-id").value="";
+  document.getElementById("prod-nombre").value="";
+  document.getElementById("prod-cat").value="bebida";
+  document.getElementById("prod-precio").value="";
+  document.getElementById("prod-stock").value="0";
+  document.getElementById("titulo-prod").textContent="Nuevo Producto";
+}
+function editarProd(id) {
+  const p = productos.find(x=>x.id===id);
+  document.getElementById("prod-id").value=p.id;
+  document.getElementById("prod-nombre").value=p.nombre;
+  document.getElementById("prod-cat").value=p.categoria;
+  document.getElementById("prod-precio").value=p.precio;
+  document.getElementById("prod-stock").value=p.stock;
+  document.getElementById("titulo-prod").textContent="Editar Producto";
+  modalProdBS.show();
+}
+async function guardarProducto() {
+  const id = document.getElementById("prod-id").value;
+  const body = {
+    nombre: document.getElementById("prod-nombre").value,
+    categoria: document.getElementById("prod-cat").value,
+    precio: document.getElementById("prod-precio").value,
+    stock: document.getElementById("prod-stock").value,
+    activo: 1
+  };
+  if (!body.nombre || !body.precio) { alert("Completá nombre y precio"); return; }
+  const url = id ? `/api/productos/${id}` : "/api/productos";
+  await fetch(url, {method: id?"PUT":"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  modalProdBS.hide();
+  cargarProductos();
+}
+</script>
+{% endblock %}

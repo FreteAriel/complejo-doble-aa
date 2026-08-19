@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+{% block head %}{% endblock %}
+{% set active = "agenda" %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h4 class="fw-bold mb-0"><i class="bi bi-calendar3 me-2 text-celeste-o"></i>Agenda Semanal</h4>
+  <div class="d-flex align-items-center gap-2">
+    <button class="btn btn-outline-celeste btn-sm" onclick="cambiarSemana(-1)"><i class="bi bi-chevron-left"></i></button>
+    <span class="fw-semibold" id="titulo-semana"></span>
+    <button class="btn btn-outline-celeste btn-sm" onclick="cambiarSemana(1)"><i class="bi bi-chevron-right"></i></button>
+    <button class="btn btn-sm btn-celeste" onclick="irHoy()"><i class="bi bi-house me-1"></i>Hoy</button>
+  </div>
+</div>
+
+<!-- Leyenda -->
+<div class="d-flex gap-2 flex-wrap mb-3">
+  <span class="badge badge-libre px-2 py-1">Libre</span>
+  <span class="badge badge-señado px-2 py-1">Señado</span>
+  <span class="badge badge-pagado px-2 py-1">Pagado</span>
+  <span class="badge badge-no_vino px-2 py-1">No vino</span>
+  <span class="badge badge-cancelado px-2 py-1">Cancelado</span>
+</div>
+
+<div id="agenda-grid" class="overflow-x-auto"></div>
+
+<!-- Modal reserva -->
+<div class="modal fade" id="modalReserva" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold" id="modal-titulo">Reserva</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="r-id"/>
+        <input type="hidden" id="r-fecha"/>
+        <input type="hidden" id="r-hora"/>
+        <input type="hidden" id="r-cancha"/>
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label fw-semibold">Cliente</label>
+            <input type="text" class="form-control" id="r-nombre" placeholder="Nombre del cliente" autocomplete="off"/>
+            <div id="autocomplete-list" class="list-group position-absolute z-3" style="max-height:180px;overflow-y:auto;width:calc(100% - 3rem)"></div>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">Estado</label>
+            <select class="form-select" id="r-estado">
+              <option value="señado">Señado</option>
+              <option value="pagado">Pagado</option>
+              <option value="no_vino">No vino</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">Monto total ($)</label>
+            <input type="number" class="form-control" id="r-total" placeholder="0"/>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">Seña ($)</label>
+            <input type="number" class="form-control" id="r-senia" placeholder="0"/>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">Cobrado ($)</label>
+            <input type="number" class="form-control" id="r-cobrado" placeholder="0"/>
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Notas</label>
+            <textarea class="form-control" id="r-notas" rows="2" placeholder="Observaciones..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button class="btn btn-outline-danger btn-sm me-auto" id="btn-cancelar-reserva" onclick="cancelarReserva()" style="display:none">
+          <i class="bi bi-x-circle me-1"></i>Cancelar turno
+        </button>
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+        <button class="btn btn-celeste" onclick="guardarReserva()"><i class="bi bi-check2 me-1"></i>Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const HORARIOS = {{ horarios | tojson }};
+const CANCHAS = {{ canchas | tojson }};
+const DIAS_NOMBRE = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+let semanaActual = "{{ semana }}";
+let reservasCache = {};
+let modalBS;
+
+document.addEventListener("DOMContentLoaded", () => {
+  modalBS = new bootstrap.Modal(document.getElementById("modalReserva"));
+  cargarAgenda();
+  setupAutocomplete();
+});
+
+function irHoy() {
+  const hoy = new Date();
+  const dia = hoy.getDay(); // 0=dom ... 6=sab
+  const diasDesdeMartes = (dia - 2 + 7) % 7;
+  const martes = new Date(hoy);
+  martes.setDate(hoy.getDate() - diasDesdeMartes);
+  semanaActual = martes.toISOString().slice(0,10);
+  cargarAgenda();
+}
+
+function cambiarSemana(dir) {
+  const d = new Date(semanaActual + "T00:00:00");
+  d.setDate(d.getDate() + dir * 7);
+  semanaActual = d.toISOString().slice(0,10);
+  cargarAgenda();
+}
+
+async function cargarAgenda() {
+  const res = await fetch(`/api/agenda?semana=${semanaActual}`);
+  const data = await res.json();
+  reservasCache = {};
+  for (const r of data.reservas) {
+    const key = `${r.fecha}_${r.hora}_${r.cancha}`;
+    reservasCache[key] = r;
+  }
+  renderGrid(data.dias);
+}
+
+function renderGrid(dias) {
+  const inicio = new Date(dias[0] + "T00:00:00");
+  const fin = new Date(dias[dias.length-1] + "T00:00:00");
+  const tituloEl = document.getElementById("titulo-semana");
+  tituloEl.textContent = `${inicio.getDate()} ${MESES[inicio.getMonth()]} — ${fin.getDate()} ${MESES[fin.getMonth()]}`;
+
+  let html = `<table class="table table-bordered mb-0" style="min-width:700px">
+    <thead>
+      <tr>
+        <th style="width:60px" class="bg-light"></th>
+        <th style="width:50px" class="bg-light text-center text-muted small">Cancha</th>`;
+  for (const f of dias) {
+    const d = new Date(f + "T00:00:00");
+    const hoyStr = new Date().toISOString().slice(0,10);
+    const esHoy = f === hoyStr;
+    html += `<th class="text-center ${esHoy ? 'table-info' : ''}">
+      <div class="fw-bold">${DIAS_NOMBRE[d.getDay()]}</div>
+      <div class="small text-muted">${d.getDate()}</div>
+    </th>`;
+  }
+  html += `</tr></thead><tbody>`;
+
+  for (const hora of HORARIOS) {
+    for (let i=0; i<CANCHAS.length; i++) {
+      const cancha = CANCHAS[i];
+      html += `<tr>`;
+      if (i === 0) {
+        html += `<td rowspan="2" class="hora-label text-center align-middle bg-light">${hora}hs</td>`;
+      }
+      html += `<td class="text-center align-middle small fw-bold text-muted bg-light">#${cancha}</td>`;
+      for (const fecha of dias) {
+        const key = `${fecha}_${hora}_${cancha}`;
+        const r = reservasCache[key];
+        if (r && r.estado !== 'cancelado') {
+          const estado = r.estado;
+          html += `<td class="p-1">
+            <div class="turno-card turno-${estado}" onclick="abrirModal('${fecha}','${hora}',${cancha})">
+              <div class="fw-semibold">${r.cliente_nombre}</div>
+              <div class="d-flex justify-content-between mt-1">
+                <span class="badge badge-${estado}">${labelEstado(estado)}</span>
+                ${r.monto_senia > 0 ? `<span class="text-muted">Seña $${fmt(r.monto_senia)}</span>` : ''}
+              </div>
+            </div>
+          </td>`;
+        } else {
+          html += `<td class="p-1">
+            <div class="turno-card turno-libre" onclick="abrirModal('${fecha}','${hora}',${cancha})">
+              <span class="text-celeste-o small"><i class="bi bi-plus-circle me-1"></i>Libre</span>
+            </div>
+          </td>`;
+        }
+      }
+      html += `</tr>`;
+    }
+  }
+  html += `</tbody></table>`;
+  document.getElementById("agenda-grid").innerHTML = html;
+}
+
+function labelEstado(e) {
+  return {señado:"Señado",pagado:"Pagado",no_vino:"No vino",cancelado:"Cancelado",libre:"Libre"}[e] || e;
+}
+function fmt(n) { return Number(n||0).toLocaleString("es-AR"); }
+
+function abrirModal(fecha, hora, cancha) {
+  const key = `${fecha}_${hora}_${cancha}`;
+  const r = reservasCache[key];
+  document.getElementById("r-fecha").value = fecha;
+  document.getElementById("r-hora").value = hora;
+  document.getElementById("r-cancha").value = cancha;
+
+  const d = new Date(fecha + "T00:00:00");
+  document.getElementById("modal-titulo").textContent =
+    `${DIAS_NOMBRE[d.getDay()]} ${d.getDate()} · ${hora}hs · Cancha ${cancha}`;
+
+  if (r && r.estado !== 'cancelado') {
+    document.getElementById("r-id").value = r.id;
+    document.getElementById("r-nombre").value = r.cliente_nombre;
+    document.getElementById("r-estado").value = r.estado;
+    document.getElementById("r-total").value = r.monto_total || "";
+    document.getElementById("r-senia").value = r.monto_senia || "";
+    document.getElementById("r-cobrado").value = r.monto_pagado || "";
+    document.getElementById("r-notas").value = r.notas || "";
+    document.getElementById("btn-cancelar-reserva").style.display = "";
+  } else {
+    document.getElementById("r-id").value = "";
+    document.getElementById("r-nombre").value = "";
+    document.getElementById("r-estado").value = "señado";
+    document.getElementById("r-total").value = "";
+    document.getElementById("r-senia").value = "10000";
+    document.getElementById("r-cobrado").value = "";
+    document.getElementById("r-notas").value = "";
+    document.getElementById("btn-cancelar-reserva").style.display = "none";
+  }
+  modalBS.show();
+}
+
+async function guardarReserva() {
+  const id = document.getElementById("r-id").value;
+  const body = {
+    fecha: document.getElementById("r-fecha").value,
+    hora: document.getElementById("r-hora").value,
+    cancha: document.getElementById("r-cancha").value,
+    cliente_nombre: document.getElementById("r-nombre").value.trim(),
+    estado: document.getElementById("r-estado").value,
+    monto_total: document.getElementById("r-total").value || 0,
+    monto_senia: document.getElementById("r-senia").value || 0,
+    monto_pagado: document.getElementById("r-cobrado").value || 0,
+    notas: document.getElementById("r-notas").value
+  };
+  if (!body.cliente_nombre) { alert("Ingresá el nombre del cliente"); return; }
+
+  let url = "/api/reservas", method = "POST";
+  if (id) { url = `/api/reservas/${id}`; method = "PUT"; }
+
+  const res = await fetch(url, {
+    method, headers: {"Content-Type":"application/json"}, body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    alert("Error: " + (err.detail || "Turno ya ocupado"));
+    return;
+  }
+  modalBS.hide();
+  cargarAgenda();
+}
+
+async function cancelarReserva() {
+  const id = document.getElementById("r-id").value;
+  if (!id || !confirm("¿Cancelar este turno?")) return;
+  await fetch(`/api/reservas/${id}`, { method: "DELETE" });
+  modalBS.hide();
+  cargarAgenda();
+}
+
+function setupAutocomplete() {
+  const input = document.getElementById("r-nombre");
+  const list = document.getElementById("autocomplete-list");
+  let timer;
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) { list.innerHTML=""; return; }
+    timer = setTimeout(async () => {
+      const res = await fetch(`/api/clientes?q=${encodeURIComponent(q)}`);
+      const clientes = await res.json();
+      list.innerHTML = clientes.map(c =>
+        `<button type="button" class="list-group-item list-group-item-action py-1 px-2"
+          onclick="selCliente('${c.nombre.replace(/'/g,"\\'")}')">
+          ${c.nombre} ${c.telefono ? '<small class=text-muted>'+c.telefono+'</small>' : ''}
+        </button>`
+      ).join("");
+    }, 200);
+  });
+  document.addEventListener("click", e => {
+    if (!list.contains(e.target) && e.target !== input) list.innerHTML = "";
+  });
+}
+function selCliente(nombre) {
+  document.getElementById("r-nombre").value = nombre;
+  document.getElementById("autocomplete-list").innerHTML = "";
+}
+</script>
+{% endblock %}
