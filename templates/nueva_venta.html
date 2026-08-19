@@ -1,0 +1,468 @@
+{% extends "base.html" %}
+{% set active = "bufet" %}
+
+{% block head %}
+<style>
+  /* ── POS full-page overrides ─── */
+  .pos-panel {
+    background: var(--blanco);
+    border: 1px solid var(--borde);
+    border-radius: 14px;
+    height: calc(100vh - 90px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .pos-panel-header {
+    background: var(--celeste-claro);
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--borde);
+    font-weight: 700;
+    color: var(--negro);
+    font-size: .95rem;
+    flex-shrink: 0;
+  }
+  .pos-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px;
+  }
+  .pos-total-box {
+    background: var(--celeste);
+    color: #fff;
+    border-radius: 12px;
+    text-align: center;
+    padding: 14px 10px;
+    margin: 10px 0;
+  }
+  .pos-total-box .lbl { font-size: .78rem; opacity: .85; text-transform: uppercase; letter-spacing: 1px; }
+  .pos-total-box .monto { font-size: 2.2rem; font-weight: 800; line-height: 1.1; }
+
+  /* Formas de pago */
+  .pago-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .pago-tab {
+    flex: 1; min-width: 80px; padding: 7px 4px; text-align: center;
+    border: 2px solid var(--borde); border-radius: 8px; font-size: .78rem;
+    font-weight: 700; cursor: pointer; background: var(--gris-suave); color: var(--negro);
+    transition: .15s;
+  }
+  .pago-tab.active {
+    border-color: var(--celeste); background: var(--celeste-claro); color: var(--celeste-oscuro);
+  }
+
+  /* Botones acción */
+  .btn-confirmar {
+    background: var(--celeste); color: #fff; font-weight: 800;
+    font-size: 1.05rem; letter-spacing: .5px; border: none;
+    border-radius: 10px; padding: 12px; width: 100%;
+  }
+  .btn-confirmar:hover { background: var(--celeste-oscuro); color: #fff; }
+  .btn-limpiar {
+    background: transparent; color: #dc3545; font-weight: 700;
+    border: 2px solid #dc3545; border-radius: 10px; padding: 9px;
+    width: 100%; margin-top: 8px;
+  }
+  .btn-limpiar:hover { background: #fff0f0; }
+
+  /* Tabla ticket */
+  .ticket-table { font-size: .84rem; }
+  .ticket-table thead th {
+    background: var(--celeste-claro); color: var(--negro);
+    font-weight: 700; border-color: var(--borde); padding: 7px 10px;
+  }
+  .ticket-table td { border-color: var(--borde); padding: 6px 10px; vertical-align: middle; }
+  .ticket-table .btn-quitar {
+    background: none; border: none; color: #dc3545; font-size: .85rem;
+    padding: 2px 5px; cursor: pointer;
+  }
+  .ticket-empty {
+    text-align: center; color: #aaa; padding: 40px 20px;
+  }
+
+  /* Buscador producto */
+  .prod-search-result {
+    position: absolute; z-index: 999; width: 100%;
+    background: #fff; border: 1px solid var(--borde);
+    border-radius: 8px; max-height: 220px; overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,.12);
+  }
+  .prod-search-item {
+    padding: 8px 12px; cursor: pointer; font-size: .85rem;
+    border-bottom: 1px solid var(--celeste-fondo);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .prod-search-item:hover { background: var(--celeste-fondo); }
+  .prod-search-wrap { position: relative; }
+
+  @media(max-width:768px) {
+    .pos-panel { height: auto; }
+    .pos-total-box .monto { font-size: 1.6rem; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-2 mb-3">
+  <a href="/bufet" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <h5 class="fw-bold mb-0"><i class="bi bi-cart-plus me-2 text-celeste-o"></i>Nueva Venta</h5>
+</div>
+
+<div class="row g-3" style="height:calc(100vh - 130px)">
+
+  <!-- ══ COLUMNA IZQUIERDA ══ -->
+  <div class="col-lg-4 col-md-5">
+    <div class="pos-panel">
+      <div class="pos-panel-header"><i class="bi bi-receipt me-2"></i>Ticket</div>
+      <div class="pos-panel-body">
+
+        <!-- Fecha -->
+        <div class="mb-2">
+          <label class="form-label fw-semibold small mb-1">Fecha del ticket</label>
+          <input type="date" class="form-control form-control-sm" id="ticket-fecha"/>
+        </div>
+
+        <!-- Total -->
+        <div class="pos-total-box">
+          <div class="lbl">Total</div>
+          <div class="monto" id="total-display">$0</div>
+        </div>
+
+        <!-- Formas de pago -->
+        <div class="mb-1">
+          <label class="form-label fw-semibold small mb-2">Forma de pago</label>
+          <div class="pago-tabs">
+            <div class="pago-tab active" data-pago="efectivo" onclick="selectPago('efectivo')">
+              <i class="bi bi-cash me-1"></i>Efectivo
+            </div>
+            <div class="pago-tab" data-pago="transferencia" onclick="selectPago('transferencia')">
+              <i class="bi bi-phone me-1"></i>Transferencia
+            </div>
+            <div class="pago-tab" data-pago="debito" onclick="selectPago('debito')">
+              <i class="bi bi-credit-card me-1"></i>Débito
+            </div>
+          </div>
+        </div>
+
+        <!-- Efectivo recibido (solo en efectivo) -->
+        <div id="efectivo-section" class="mb-2">
+          <label class="form-label fw-semibold small mb-1">Efectivo recibido $</label>
+          <input type="number" class="form-control form-control-sm" id="efectivo-input"
+                 placeholder="0,00" oninput="calcVuelto()"/>
+          <div id="vuelto-display" class="text-success small fw-bold mt-1" style="display:none"></div>
+        </div>
+
+        <!-- Notas -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold small mb-1">Notas (opcional)</label>
+          <input type="text" class="form-control form-control-sm" id="ticket-notas" placeholder="Ej: Mesa 3, jugadores equipo azul…"/>
+        </div>
+
+        <!-- Botones -->
+        <button class="btn-confirmar" onclick="confirmarVenta()">
+          <i class="bi bi-check2-circle me-2"></i>CONFIRMAR VENTA
+        </button>
+        <button class="btn-limpiar" onclick="limpiarTicket()">
+          <i class="bi bi-trash me-2"></i>Limpiar ticket
+        </button>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ COLUMNA DERECHA ══ -->
+  <div class="col-lg-8 col-md-7 d-flex flex-column gap-3">
+
+    <!-- Agregar Producto -->
+    <div class="card p-3" style="flex-shrink:0">
+      <h6 class="fw-bold mb-3"><i class="bi bi-search me-2 text-celeste-o"></i>Agregar Producto</h6>
+      <div class="row g-2 align-items-end">
+        <div class="col-md-5 col-7">
+          <label class="form-label small fw-semibold mb-1">Descripción</label>
+          <div class="prod-search-wrap">
+            <input type="text" class="form-control form-control-sm" id="buscar-producto"
+                   placeholder="Buscar por nombre…" autocomplete="off"
+                   oninput="buscarProducto(this.value)"/>
+            <div class="prod-search-result" id="resultados-busqueda" style="display:none"></div>
+          </div>
+          <input type="hidden" id="producto-seleccionado-id"/>
+          <small class="text-muted" id="prod-sel-label"></small>
+        </div>
+        <div class="col-md-2 col-3">
+          <label class="form-label small fw-semibold mb-1">Cant.</label>
+          <input type="number" class="form-control form-control-sm" id="agregar-cantidad"
+                 value="1" min="1"/>
+        </div>
+        <div class="col-md-2 col-4">
+          <label class="form-label small fw-semibold mb-1">Precio $</label>
+          <input type="number" class="form-control form-control-sm" id="agregar-precio"
+                 placeholder="0.00"/>
+        </div>
+        <div class="col-md-3 col-8">
+          <button class="btn btn-celeste btn-sm w-100" onclick="agregarAlTicket()">
+            <i class="bi bi-plus-circle me-1"></i>Agregar al ticket
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Items del Ticket -->
+    <div class="pos-panel" style="flex:1">
+      <div class="pos-panel-header"><i class="bi bi-list-ul me-2"></i>Items del Ticket</div>
+      <div class="pos-panel-body p-0">
+        <div id="ticket-items-wrapper">
+          <div class="ticket-empty" id="ticket-empty">
+            <i class="bi bi-cart3 d-block fs-2 mb-2"></i>
+            Todavía no hay productos en el ticket
+          </div>
+          <table class="table table-hover ticket-table mb-0" id="ticket-table" style="display:none">
+            <thead>
+              <tr>
+                <th>Descripción</th>
+                <th class="text-center">Cant.</th>
+                <th class="text-end">Precio</th>
+                <th class="text-end">Subtotal</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="ticket-body"></tbody>
+            <tfoot>
+              <tr style="background:var(--celeste-fondo)">
+                <td colspan="3" class="fw-bold text-end">TOTAL:</td>
+                <td class="fw-bold text-end text-celeste-o fs-5" id="ticket-total">$0</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /col derecha -->
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let productos = [];
+let ticketItems = [];
+let formaPago = "efectivo";
+
+// ── Init ──
+document.addEventListener("DOMContentLoaded", () => {
+  const hoy = new Date().toISOString().slice(0,10);
+  document.getElementById("ticket-fecha").value = hoy;
+  cargarProductos();
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".prod-search-wrap")) {
+      document.getElementById("resultados-busqueda").style.display = "none";
+    }
+  });
+});
+
+async function cargarProductos() {
+  const res = await fetch("/api/productos");
+  productos = await res.json();
+}
+
+// ── Buscar producto ──
+function buscarProducto(q) {
+  const box = document.getElementById("resultados-busqueda");
+  if (!q.trim()) { box.style.display = "none"; return; }
+  const found = productos.filter(p => p.nombre.toLowerCase().includes(q.toLowerCase()));
+  if (!found.length) { box.style.display = "none"; return; }
+  box.innerHTML = found.slice(0, 20).map(p =>
+    `<div class="prod-search-item" onclick="seleccionarProducto(${p.id}, '${p.nombre.replace(/'/g,"\\'")}', ${p.precio})">
+      <span>${p.nombre}</span>
+      <span class="text-celeste-o fw-bold">$${p.precio.toLocaleString("es-AR")}</span>
+    </div>`
+  ).join("");
+  box.style.display = "block";
+}
+
+function seleccionarProducto(id, nombre, precio) {
+  document.getElementById("producto-seleccionado-id").value = id;
+  document.getElementById("buscar-producto").value = nombre;
+  document.getElementById("agregar-precio").value = precio;
+  document.getElementById("prod-sel-label").textContent = "";
+  document.getElementById("resultados-busqueda").style.display = "none";
+  document.getElementById("agregar-cantidad").focus();
+}
+
+// ── Agregar al ticket ──
+function agregarAlTicket() {
+  const id = document.getElementById("producto-seleccionado-id").value;
+  const nombre = document.getElementById("buscar-producto").value.trim();
+  const cantidad = parseInt(document.getElementById("agregar-cantidad").value) || 1;
+  const precio = parseFloat(document.getElementById("agregar-precio").value) || 0;
+
+  if (!nombre) {
+    document.getElementById("buscar-producto").focus();
+    return;
+  }
+
+  // Si ya existe el mismo producto, sumar cantidad
+  const existing = ticketItems.find(i => i.producto_id == id && i.nombre === nombre);
+  if (existing) {
+    existing.cantidad += cantidad;
+  } else {
+    ticketItems.push({ producto_id: id || null, nombre, cantidad, precio });
+  }
+
+  // Reset buscador
+  document.getElementById("buscar-producto").value = "";
+  document.getElementById("producto-seleccionado-id").value = "";
+  document.getElementById("agregar-precio").value = "";
+  document.getElementById("agregar-cantidad").value = 1;
+  document.getElementById("prod-sel-label").textContent = "";
+
+  renderTicket();
+  document.getElementById("buscar-producto").focus();
+}
+
+// ── Render tabla ticket ──
+function renderTicket() {
+  const empty = document.getElementById("ticket-empty");
+  const table = document.getElementById("ticket-table");
+  const tbody = document.getElementById("ticket-body");
+
+  if (!ticketItems.length) {
+    empty.style.display = "block";
+    table.style.display = "none";
+    actualizarTotal();
+    return;
+  }
+
+  empty.style.display = "none";
+  table.style.display = "table";
+
+  tbody.innerHTML = ticketItems.map((item, i) => {
+    const sub = item.precio * item.cantidad;
+    return `<tr>
+      <td>${item.nombre}</td>
+      <td class="text-center">
+        <div class="d-flex align-items-center justify-content-center gap-1">
+          <button class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="cambiarCant(${i},-1)">−</button>
+          <span class="fw-bold" style="min-width:24px;text-align:center">${item.cantidad}</span>
+          <button class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="cambiarCant(${i},1)">+</button>
+        </div>
+      </td>
+      <td class="text-end">$${item.precio.toLocaleString("es-AR")}</td>
+      <td class="text-end fw-semibold text-celeste-o">$${sub.toLocaleString("es-AR")}</td>
+      <td class="text-center">
+        <button class="ticket-table btn-quitar" onclick="quitarItem(${i})"><i class="bi bi-x-lg"></i></button>
+      </td>
+    </tr>`;
+  }).join("");
+
+  actualizarTotal();
+}
+
+function cambiarCant(i, delta) {
+  ticketItems[i].cantidad = Math.max(1, ticketItems[i].cantidad + delta);
+  renderTicket();
+}
+function quitarItem(i) {
+  ticketItems.splice(i, 1);
+  renderTicket();
+}
+
+function actualizarTotal() {
+  const total = ticketItems.reduce((s, i) => s + i.precio * i.cantidad, 0);
+  const fmt = "$" + total.toLocaleString("es-AR");
+  document.getElementById("total-display").textContent = fmt;
+  document.getElementById("ticket-total").textContent = fmt;
+  calcVuelto();
+}
+
+// ── Forma de pago ──
+function selectPago(tipo) {
+  formaPago = tipo;
+  document.querySelectorAll(".pago-tab").forEach(t => t.classList.remove("active"));
+  document.querySelector(`[data-pago="${tipo}"]`).classList.add("active");
+  document.getElementById("efectivo-section").style.display = tipo === "efectivo" ? "block" : "none";
+  document.getElementById("vuelto-display").style.display = "none";
+}
+
+function calcVuelto() {
+  if (formaPago !== "efectivo") return;
+  const total = ticketItems.reduce((s, i) => s + i.precio * i.cantidad, 0);
+  const recibido = parseFloat(document.getElementById("efectivo-input").value) || 0;
+  const vueltoDiv = document.getElementById("vuelto-display");
+  if (recibido > 0 && total > 0) {
+    const vuelto = recibido - total;
+    vueltoDiv.style.display = "block";
+    if (vuelto >= 0) {
+      vueltoDiv.textContent = `Vuelto: $${vuelto.toLocaleString("es-AR")}`;
+      vueltoDiv.className = "text-success small fw-bold mt-1";
+    } else {
+      vueltoDiv.textContent = `Falta: $${Math.abs(vuelto).toLocaleString("es-AR")}`;
+      vueltoDiv.className = "text-danger small fw-bold mt-1";
+    }
+  } else {
+    vueltoDiv.style.display = "none";
+  }
+}
+
+// ── Limpiar ──
+function limpiarTicket() {
+  if (ticketItems.length && !confirm("¿Limpiar el ticket actual?")) return;
+  ticketItems = [];
+  document.getElementById("efectivo-input").value = "";
+  document.getElementById("ticket-notas").value = "";
+  renderTicket();
+}
+
+// ── Confirmar Venta ──
+async function confirmarVenta() {
+  if (!ticketItems.length) {
+    alert("El ticket está vacío. Agregá al menos un producto.");
+    return;
+  }
+  const fecha = document.getElementById("ticket-fecha").value;
+  const notas = document.getElementById("ticket-notas").value;
+  const items = ticketItems.map(i => ({
+    producto_id: i.producto_id,
+    nombre: i.nombre,
+    cantidad: i.cantidad,
+    precio: i.precio
+  }));
+
+  const btn = document.querySelector(".btn-confirmar");
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Guardando…';
+
+  try {
+    const res = await fetch("/api/ventas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items, fecha, forma_pago: formaPago, notas })
+    });
+    if (!res.ok) throw new Error("Error al guardar");
+
+    // Éxito → mostrar confirmación y limpiar
+    mostrarConfirmacion();
+    ticketItems = [];
+    document.getElementById("efectivo-input").value = "";
+    document.getElementById("ticket-notas").value = "";
+    renderTicket();
+  } catch (e) {
+    alert("Error al registrar la venta. Reintentá.");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-check2-circle me-2"></i>CONFIRMAR VENTA';
+  }
+}
+
+function mostrarConfirmacion() {
+  const total = ticketItems.reduce((s, i) => s + i.precio * i.cantidad, 0);
+  const toast = document.createElement("div");
+  toast.className = "position-fixed bottom-0 end-0 m-3 p-3 rounded-3 text-white fw-bold shadow";
+  toast.style.cssText = "background:var(--celeste);z-index:9999;font-size:1rem;";
+  toast.innerHTML = `<i class="bi bi-check-circle-fill me-2"></i>Venta registrada — $${total.toLocaleString("es-AR")}`;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+</script>
+{% endblock %}

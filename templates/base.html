@@ -134,7 +134,16 @@
     <div class="collapse navbar-collapse" id="nav">
       <ul class="navbar-nav ms-auto gap-1">
         <li class="nav-item"><a class="nav-link {% if active=='agenda' %}active{% endif %}" href="/agenda"><i class="bi bi-calendar3 me-1"></i>Agenda</a></li>
-        <li class="nav-item"><a class="nav-link {% if active=='bufet' %}active{% endif %}" href="/bufet"><i class="bi bi-cup-straw me-1"></i>Bufet</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if active=='bufet' %}active{% endif %}" href="#" data-bs-toggle="dropdown">
+            <i class="bi bi-cup-straw me-1"></i>Bufet
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end" style="min-width:170px">
+            <li><a class="dropdown-item" href="/bufet"><i class="bi bi-receipt me-2 text-celeste-o"></i>Ventas del día</a></li>
+            <li><a class="dropdown-item" href="/bufet/nueva-venta"><i class="bi bi-cart-plus me-2 text-celeste-o"></i>Nueva Venta</a></li>
+            <li><a class="dropdown-item" href="/bufet/productos"><i class="bi bi-box-seam me-2 text-celeste-o"></i>Productos</a></li>
+          </ul>
+        </li>
         <li class="nav-item"><a class="nav-link {% if active=='clientes' %}active{% endif %}" href="/clientes"><i class="bi bi-people me-1"></i>Clientes</a></li>
         <li class="nav-item"><a class="nav-link {% if active=='caja' %}active{% endif %}" href="/caja"><i class="bi bi-cash-coin me-1"></i>Caja</a></li>
       </ul>

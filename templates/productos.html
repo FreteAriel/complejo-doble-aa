@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+{% set active = "bufet" %}
+
+{% block head %}
+<style>
+  .panel-form {
+    background: var(--blanco);
+    border: 1px solid var(--borde);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .panel-form-header {
+    background: var(--celeste);
+    color: #fff;
+    padding: 12px 18px;
+    font-weight: 700;
+    font-size: .95rem;
+  }
+  .panel-form-body { padding: 18px; }
+
+  .panel-table {
+    background: var(--blanco);
+    border: 1px solid var(--borde);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .panel-table-header {
+    background: var(--celeste-claro);
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--borde);
+    font-weight: 700;
+    font-size: .95rem;
+  }
+
+  .stock-badge {
+    display: inline-block; min-width: 32px; text-align: center;
+    padding: 2px 7px; border-radius: 6px; font-weight: 700; font-size: .8rem;
+  }
+  .stock-ok   { background: #D6FAE8; color: #0A6B35; }
+  .stock-low  { background: #FFF3CD; color: #7A5A00; }
+  .stock-zero { background: #FFE0E0; color: #9B1C1C; }
+
+  .codigo-badge {
+    font-family: monospace; font-size: .78rem;
+    background: var(--celeste-fondo); color: var(--celeste-oscuro);
+    border-radius: 4px; padding: 2px 6px; font-weight: 700;
+  }
+
+  .btn-edit-prod  { background: none; border: none; color: var(--celeste-oscuro); cursor: pointer; padding: 3px 6px; }
+  .btn-edit-prod:hover { color: var(--celeste); }
+  .btn-del-prod   { background: none; border: none; color: #dc3545; cursor: pointer; padding: 3px 6px; }
+  .btn-del-prod:hover { background: #fff0f0; border-radius: 4px; }
+
+  .form-section-label {
+    font-size: .7rem; text-transform: uppercase; letter-spacing: 1px;
+    font-weight: 700; color: var(--celeste-oscuro); margin-bottom: 4px; display: block;
+  }
+  .ganancia-badge {
+    display: inline-block; background: #FFF3CD; color: #7A5A00;
+    border-radius: 6px; padding: 2px 7px; font-size: .78rem; font-weight: 700;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-2 mb-3">
+  <a href="/bufet" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <h5 class="fw-bold mb-0"><i class="bi bi-box-seam me-2 text-celeste-o"></i>Productos del Bufet</h5>
+</div>
+
+<div class="row g-3">
+
+  <!-- ══ PANEL IZQUIERDO: Formulario ══ -->
+  <div class="col-lg-4 col-md-5">
+    <div class="panel-form">
+      <div class="panel-form-header">
+        <i class="bi bi-plus-circle me-2"></i><span id="form-titulo">Nuevo Producto</span>
+      </div>
+      <div class="panel-form-body">
+        <input type="hidden" id="prod-id"/>
+
+        <div class="mb-3">
+          <label class="form-section-label">Código</label>
+          <div class="form-control form-control-sm bg-light text-muted" id="prod-codigo-display">automático</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-section-label">Descripción *</label>
+          <input type="text" class="form-control" id="prod-nombre" placeholder="Ej: Coca-Cola 500ml"/>
+        </div>
+
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-section-label">Precio de compra $</label>
+            <input type="number" class="form-control form-control-sm" id="prod-precio-compra"
+                   placeholder="0,00" oninput="calcGanancia()"/>
+          </div>
+          <div class="col-6">
+            <label class="form-section-label">Precio de venta $</label>
+            <input type="number" class="form-control form-control-sm" id="prod-precio"
+                   placeholder="0,00" oninput="calcGanancia()"/>
+          </div>
+        </div>
+
+        <!-- Indicador ganancia -->
+        <div id="ganancia-info" class="mb-3 text-center" style="display:none">
+          <span class="ganancia-badge" id="ganancia-txt"></span>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-section-label">Categoría / Rubro</label>
+          <input type="text" class="form-control form-control-sm" id="prod-cat"
+                 list="cat-list" placeholder="Ej: BEBIDAS, MINUTAS, SNACKS…"/>
+          <datalist id="cat-list">
+            <option value="BEBIDAS"/>
+            <option value="MINUTAS"/>
+            <option value="SNACKS"/>
+            <option value="GASEOSAS"/>
+            <option value="AGUAS"/>
+            <option value="CERVEZAS"/>
+            <option value="OTRO"/>
+          </datalist>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-section-label">Stock inicial</label>
+          <input type="number" class="form-control form-control-sm" id="prod-stock"
+                 value="0" min="0"/>
+          <small class="text-muted">Solo para productos nuevos.</small>
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+          <button class="btn btn-celeste flex-grow-1" onclick="guardarProducto()">
+            <i class="bi bi-floppy me-1"></i>Guardar Producto
+          </button>
+          <button class="btn btn-outline-secondary" onclick="nuevoProducto()" title="Nuevo">
+            <i class="bi bi-plus-circle"></i> Nuevo
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PANEL DERECHO: Tabla ══ -->
+  <div class="col-lg-8 col-md-7">
+    <div class="panel-table">
+      <div class="panel-table-header d-flex justify-content-between align-items-center">
+        <span>
+          <i class="bi bi-list-ul me-2"></i>
+          Productos (<span id="total-count">0</span>)
+        </span>
+        <input type="text" class="form-control form-control-sm" id="filtro-tabla"
+               style="max-width:240px" placeholder="Filtrar por código o descripción…"
+               oninput="filtrarTabla(this.value)"/>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="table table-hover mb-0" style="font-size:.84rem">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Descripción</th>
+              <th class="text-end">P. Compra</th>
+              <th class="text-center">% Ganancia</th>
+              <th class="text-end">P. Venta</th>
+              <th class="text-center">Stock</th>
+              <th>Categoría</th>
+              <th class="text-center">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-productos"></tbody>
+        </table>
+        <div id="tabla-empty" class="text-center text-muted py-5" style="display:none">
+          <i class="bi bi-box-seam d-block fs-2 mb-2"></i>Sin productos
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let productos = [];
+let productosFiltrados = [];
+
+document.addEventListener("DOMContentLoaded", cargarProductos);
+
+async function cargarProductos() {
+  const res = await fetch("/api/productos");
+  productos = await res.json();
+  productosFiltrados = [...productos];
+  renderTabla();
+}
+
+function filtrarTabla(q) {
+  if (!q.trim()) {
+    productosFiltrados = [...productos];
+  } else {
+    const lq = q.toLowerCase();
+    productosFiltrados = productos.filter(p =>
+      p.nombre.toLowerCase().includes(lq) ||
+      String(p.id).padStart(6,"0").includes(lq) ||
+      (p.categoria||"").toLowerCase().includes(lq)
+    );
+  }
+  renderTabla();
+}
+
+function renderTabla() {
+  const tbody = document.getElementById("tabla-productos");
+  const empty = document.getElementById("tabla-empty");
+  document.getElementById("total-count").textContent = productos.length;
+
+  if (!productosFiltrados.length) {
+    tbody.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+
+  tbody.innerHTML = productosFiltrados.map(p => {
+    const codigo = String(p.id).padStart(6,"0");
+    const precioCompra = p.precio_compra || 0;
+    let gananciaHtml = "—";
+    if (precioCompra > 0 && p.precio > 0) {
+      const g = ((p.precio - precioCompra) / precioCompra * 100).toFixed(1);
+      gananciaHtml = `<span class="ganancia-badge">${g}%</span>`;
+    }
+    let stockClass = p.stock > 5 ? "stock-ok" : p.stock > 0 ? "stock-low" : "stock-zero";
+    return `<tr>
+      <td><span class="codigo-badge">${codigo}</span></td>
+      <td>${p.nombre}</td>
+      <td class="text-end">${precioCompra > 0 ? precioCompra.toLocaleString("es-AR") + ",00" : "—"}</td>
+      <td class="text-center">${gananciaHtml}</td>
+      <td class="text-end fw-semibold">${p.precio.toLocaleString("es-AR")},00</td>
+      <td class="text-center"><span class="stock-badge ${stockClass}">${p.stock}</span></td>
+      <td><small class="text-muted">${p.categoria||""}</small></td>
+      <td class="text-center">
+        <button class="btn-edit-prod" onclick="editarProducto(${p.id})" title="Editar">
+          <i class="bi bi-pencil-square"></i>
+        </button>
+        <button class="btn-del-prod" onclick="desactivarProducto(${p.id}, '${p.nombre.replace(/'/g,"\\'")}')">
+          <i class="bi bi-trash3"></i>
+        </button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+function calcGanancia() {
+  const compra = parseFloat(document.getElementById("prod-precio-compra").value) || 0;
+  const venta  = parseFloat(document.getElementById("prod-precio").value) || 0;
+  const info   = document.getElementById("ganancia-info");
+  const txt    = document.getElementById("ganancia-txt");
+  if (compra > 0 && venta > 0) {
+    const g = ((venta - compra) / compra * 100).toFixed(1);
+    txt.textContent = `Ganancia: ${g}%`;
+    info.style.display = "block";
+  } else {
+    info.style.display = "none";
+  }
+}
+
+function nuevoProducto() {
+  document.getElementById("prod-id").value = "";
+  document.getElementById("prod-nombre").value = "";
+  document.getElementById("prod-precio-compra").value = "";
+  document.getElementById("prod-precio").value = "";
+  document.getElementById("prod-cat").value = "";
+  document.getElementById("prod-stock").value = 0;
+  document.getElementById("prod-codigo-display").textContent = "automático";
+  document.getElementById("form-titulo").textContent = "Nuevo Producto";
+  document.getElementById("ganancia-info").style.display = "none";
+  document.getElementById("prod-nombre").focus();
+}
+
+function editarProducto(id) {
+  const p = productos.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById("prod-id").value = p.id;
+  document.getElementById("prod-nombre").value = p.nombre;
+  document.getElementById("prod-precio-compra").value = p.precio_compra || "";
+  document.getElementById("prod-precio").value = p.precio;
+  document.getElementById("prod-cat").value = p.categoria || "";
+  document.getElementById("prod-stock").value = p.stock;
+  document.getElementById("prod-codigo-display").textContent = String(p.id).padStart(6,"0");
+  document.getElementById("form-titulo").textContent = "Editar Producto";
+  calcGanancia();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  document.getElementById("prod-nombre").focus();
+}
+
+async function guardarProducto() {
+  const id = document.getElementById("prod-id").value;
+  const nombre = document.getElementById("prod-nombre").value.trim();
+  const precio = parseFloat(document.getElementById("prod-precio").value);
+  if (!nombre || isNaN(precio)) {
+    alert("Completá descripción y precio de venta.");
+    return;
+  }
+  const body = {
+    nombre,
+    precio,
+    categoria: document.getElementById("prod-cat").value.trim() || "otro",
+    stock: parseInt(document.getElementById("prod-stock").value) || 0,
+    activo: 1
+  };
+  const url = id ? `/api/productos/${id}` : "/api/productos";
+  const method = id ? "PUT" : "POST";
+  const res = await fetch(url, {
+    method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+  });
+  if (!res.ok) { alert("Error al guardar."); return; }
+  await cargarProductos();
+  nuevoProducto();
+  mostrarToast(id ? "Producto actualizado" : "Producto creado");
+}
+
+async function desactivarProducto(id, nombre) {
+  if (!confirm(`¿Desactivar "${nombre}"?`)) return;
+  await fetch(`/api/productos/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ activo: 0, nombre, precio: 0, categoria: "otro", stock: 0 })
+  });
+  await cargarProductos();
+}
+
+function mostrarToast(msg) {
+  const t = document.createElement("div");
+  t.className = "position-fixed bottom-0 end-0 m-3 p-3 rounded-3 text-white fw-bold shadow";
+  t.style.cssText = "background:var(--celeste);z-index:9999;";
+  t.innerHTML = `<i class="bi bi-check-circle-fill me-2"></i>${msg}`;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+</script>
+{% endblock %}

@@ -12,6 +12,7 @@ from mercadopago_service import router as mp_router, crear_link_pago
 app = FastAPI(title="Complejo Doble AA")
 app.include_router(bot_router)
 app.include_router(mp_router)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 HORARIOS = ["17", "18", "19", "20", "21", "22", "23"]
@@ -44,6 +45,14 @@ async def agenda_page(request: Request, semana: str = None):
 @app.get("/bufet", response_class=HTMLResponse)
 async def bufet_page(request: Request):
     return templates.TemplateResponse("bufet.html", {"request": request})
+
+@app.get("/bufet/nueva-venta", response_class=HTMLResponse)
+async def nueva_venta_page(request: Request):
+    return templates.TemplateResponse("nueva_venta.html", {"request": request})
+
+@app.get("/bufet/productos", response_class=HTMLResponse)
+async def productos_page(request: Request):
+    return templates.TemplateResponse("productos.html", {"request": request})
 
 @app.get("/clientes", response_class=HTMLResponse)
 async def clientes_page(request: Request):
@@ -291,30 +300,44 @@ async def registrar_venta(request: Request):
     data = await request.json()
     items = data.get("items", [])
     fecha = data.get("fecha", date.today().isoformat())
+    forma_pago = data.get("forma_pago", "efectivo")
     if not items:
         raise HTTPException(400, "Sin items")
     db = await get_db()
     try:
         for item in items:
-            pid = item["producto_id"]
-            qty = int(item["cantidad"])
-            async with db.execute("SELECT * FROM productos WHERE id=?", (pid,)) as cur:
-                prod = await cur.fetchone()
-            if not prod:
-                continue
-            total = prod["precio"] * qty
+            pid = item.get("producto_id")
+            qty = int(item.get("cantidad", 1))
+            nombre_custom = item.get("nombre", "")
+            precio_custom = item.get("precio")
+
+            if pid:
+                async with db.execute("SELECT * FROM productos WHERE id=?", (pid,)) as cur:
+                    prod = await cur.fetchone()
+                if prod:
+                    precio = float(precio_custom) if precio_custom is not None else prod["precio"]
+                    nombre = nombre_custom or prod["nombre"]
+                    # Descontar stock si corresponde
+                    if prod["stock"] > 0:
+                        await db.execute(
+                            "UPDATE productos SET stock = MAX(0, stock-?) WHERE id=?",
+                            (qty, pid)
+                        )
+                else:
+                    precio = float(precio_custom) if precio_custom else 0
+                    nombre = nombre_custom
+            else:
+                # Producto libre (sin id en DB)
+                precio = float(precio_custom) if precio_custom else 0
+                nombre = nombre_custom
+
+            total = precio * qty
             await db.execute(
                 """INSERT INTO ventas_bufet
                    (fecha, producto_id, producto_nombre, cantidad, precio_unitario, total)
                    VALUES (?,?,?,?,?,?)""",
-                (fecha, pid, prod["nombre"], qty, prod["precio"], total)
+                (fecha, pid, nombre, qty, precio, total)
             )
-            # Descontar stock si corresponde
-            if prod["stock"] > 0:
-                await db.execute(
-                    "UPDATE productos SET stock = MAX(0, stock-?) WHERE id=?",
-                    (qty, pid)
-                )
         await db.commit()
     finally:
         await db.close()
