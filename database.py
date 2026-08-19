@@ -40,13 +40,29 @@ CREATE TABLE IF NOT EXISTS productos (
 CREATE TABLE IF NOT EXISTS ventas_bufet (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     fecha TEXT NOT NULL,
-    producto_id INTEGER NOT NULL,
+    producto_id INTEGER,
     producto_nombre TEXT NOT NULL,
     cantidad INTEGER NOT NULL DEFAULT 1,
     precio_unitario REAL NOT NULL,
     total REAL NOT NULL,
-    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (producto_id) REFERENCES productos(id)
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS operadores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL,
+    apellido TEXT DEFAULT '',
+    email TEXT UNIQUE NOT NULL,
+    clave_hash TEXT NOT NULL,
+    es_admin INTEGER DEFAULT 0,
+    permisos TEXT DEFAULT '[]',
+    activo INTEGER DEFAULT 1,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS configuracion (
+    clave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL DEFAULT ''
 );
 """
 

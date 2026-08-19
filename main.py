@@ -1,9 +1,9 @@
-from fastapi import FastAPI, Request, Form, HTTPException
+from fastapi import FastAPI, Request, Form, HTTPException, Response, Cookie
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from datetime import date, timedelta
-import json
+import json, hashlib, secrets, os
 
 from database import init_db, get_db
 from bot import router as bot_router
@@ -32,9 +32,9 @@ async def home(request: Request):
 async def agenda_page(request: Request, semana: str = None):
     if semana is None:
         hoy = date.today()
-        # Encontrar el martes de la semana actual
-        dias_desde_martes = (hoy.weekday() - 1) % 7
-        semana = (hoy - timedelta(days=dias_desde_martes)).isoformat()
+        # Encontrar el lunes de la semana actual (weekday 0 = lunes)
+        dias_desde_lunes = hoy.weekday()
+        semana = (hoy - timedelta(days=dias_desde_lunes)).isoformat()
     return templates.TemplateResponse("agenda.html", {
         "request": request,
         "semana": semana,
@@ -62,13 +62,21 @@ async def clientes_page(request: Request):
 async def caja_page(request: Request):
     return templates.TemplateResponse("caja.html", {"request": request})
 
+@app.get("/configuracion", response_class=HTMLResponse)
+async def config_page(request: Request):
+    return templates.TemplateResponse("configuracion.html", {"request": request})
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
 # ─────────────────────────── API AGENDA ───────────────────────────
 
 @app.get("/api/agenda")
 async def get_agenda(semana: str):
     """Devuelve todas las reservas de la semana (martes a domingo)."""
     inicio = date.fromisoformat(semana)
-    dias = [(inicio + timedelta(days=i)).isoformat() for i in range(6)]
+    dias = [(inicio + timedelta(days=i)).isoformat() for i in range(7)]
     db = await get_db()
     try:
         placeholders = ",".join("?" * len(dias))
@@ -358,6 +366,177 @@ async def get_ventas(fecha: str = None):
     finally:
         await db.close()
 
+# ─────────────────────────── API CONFIGURACIÓN ───────────────────────────
+
+def hash_clave(clave: str) -> str:
+    return hashlib.sha256(clave.encode()).hexdigest()
+
+@app.get("/api/configuracion")
+async def get_configuracion():
+    db = await get_db()
+    try:
+        async with db.execute("SELECT clave, valor FROM configuracion") as cur:
+            rows = await cur.fetchall()
+        return {r["clave"]: r["valor"] for r in rows}
+    finally:
+        await db.close()
+
+@app.post("/api/configuracion")
+async def set_configuracion(request: Request):
+    data = await request.json()
+    db = await get_db()
+    try:
+        for clave, valor in data.items():
+            await db.execute(
+                "INSERT INTO configuracion (clave, valor) VALUES (?,?) ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor",
+                (clave, str(valor))
+            )
+        await db.commit()
+    finally:
+        await db.close()
+    return {"ok": True}
+
+@app.post("/api/configuracion/probar-mp")
+async def probar_mp(request: Request):
+    data = await request.json()
+    token = data.get("token", "")
+    if not token:
+        return {"ok": False, "error": "Token vacío"}
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(
+                "https://api.mercadopago.com/v1/account",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+        if res.status_code == 200:
+            info = res.json()
+            return {"ok": True, "email": info.get("email", ""), "id": info.get("id", "")}
+        return {"ok": False, "error": f"Token inválido (HTTP {res.status_code})"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+# ─── Operadores ───────────────────────────────────────────────────────────────
+
+SECCIONES = ["agenda", "nueva_venta", "productos", "bufet", "clientes", "caja", "configuracion"]
+
+@app.get("/api/operadores")
+async def get_operadores():
+    db = await get_db()
+    try:
+        async with db.execute(
+            "SELECT id, nombre, apellido, email, es_admin, permisos, activo FROM operadores ORDER BY nombre"
+        ) as cur:
+            rows = await cur.fetchall()
+        result = []
+        for r in rows:
+            op = dict(r)
+            try:
+                op["permisos"] = json.loads(op["permisos"] or "[]")
+            except Exception:
+                op["permisos"] = []
+            result.append(op)
+        return result
+    finally:
+        await db.close()
+
+@app.post("/api/operadores")
+async def crear_operador(request: Request):
+    data = await request.json()
+    nombre = data.get("nombre","").strip()
+    email  = data.get("email","").strip()
+    clave  = data.get("clave","")
+    if not nombre or not email or not clave:
+        raise HTTPException(400, "Nombre, email y clave son obligatorios")
+    permisos = json.dumps(data.get("permisos", []))
+    db = await get_db()
+    try:
+        cur = await db.execute(
+            "INSERT INTO operadores (nombre, apellido, email, clave_hash, es_admin, permisos) VALUES (?,?,?,?,?,?)",
+            (nombre, data.get("apellido",""), email, hash_clave(clave),
+             int(data.get("es_admin", 0)), permisos)
+        )
+        await db.commit()
+        return {"id": cur.lastrowid, "ok": True}
+    except Exception as e:
+        raise HTTPException(400, "Email ya existe") from e
+    finally:
+        await db.close()
+
+@app.put("/api/operadores/{op_id}")
+async def actualizar_operador(op_id: int, request: Request):
+    data = await request.json()
+    db = await get_db()
+    try:
+        async with db.execute("SELECT * FROM operadores WHERE id=?", (op_id,)) as cur:
+            op = await cur.fetchone()
+        if not op:
+            raise HTTPException(404, "Operador no encontrado")
+        permisos = json.dumps(data.get("permisos", json.loads(op["permisos"] or "[]")))
+        nueva_clave = data.get("clave")
+        clave_hash = hash_clave(nueva_clave) if nueva_clave else op["clave_hash"]
+        await db.execute(
+            """UPDATE operadores SET nombre=?, apellido=?, email=?, clave_hash=?,
+               es_admin=?, permisos=?, activo=? WHERE id=?""",
+            (data.get("nombre", op["nombre"]), data.get("apellido", op["apellido"]),
+             data.get("email", op["email"]), clave_hash,
+             int(data.get("es_admin", op["es_admin"])), permisos,
+             int(data.get("activo", op["activo"])), op_id)
+        )
+        await db.commit()
+    finally:
+        await db.close()
+    return {"ok": True}
+
+@app.delete("/api/operadores/{op_id}")
+async def eliminar_operador(op_id: int):
+    db = await get_db()
+    try:
+        await db.execute("UPDATE operadores SET activo=0 WHERE id=?", (op_id,))
+        await db.commit()
+    finally:
+        await db.close()
+    return {"ok": True}
+
+@app.post("/api/login")
+async def login(request: Request, response: Response):
+    data = await request.json()
+    email = data.get("email","").strip()
+    clave = data.get("clave","")
+    db = await get_db()
+    try:
+        async with db.execute(
+            "SELECT * FROM operadores WHERE email=? AND activo=1", (email,)
+        ) as cur:
+            op = await cur.fetchone()
+        if not op or op["clave_hash"] != hash_clave(clave):
+            raise HTTPException(401, "Email o clave incorrectos")
+        # Token de sesión simple
+        token = secrets.token_hex(32)
+        # Guardarlo en config como sesión activa (simple, suficiente para uso interno)
+        await db.execute(
+            "INSERT INTO configuracion (clave, valor) VALUES (?,?) ON CONFLICT(clave) DO UPDATE SET valor=excluded.valor",
+            (f"sesion_{token}", str(op["id"]))
+        )
+        await db.commit()
+        response.set_cookie("session", token, httponly=True, max_age=86400*7)
+        return {"ok": True, "nombre": op["nombre"], "es_admin": op["es_admin"]}
+    finally:
+        await db.close()
+
+@app.post("/api/logout")
+async def logout(request: Request, response: Response):
+    token = request.cookies.get("session","")
+    if token:
+        db = await get_db()
+        try:
+            await db.execute("DELETE FROM configuracion WHERE clave=?", (f"sesion_{token}",))
+            await db.commit()
+        finally:
+            await db.close()
+    response.delete_cookie("session")
+    return {"ok": True}
+
 # ─────────────────────────── API CAJA / REPORTES ───────────────────────────
 
 @app.get("/api/caja")
@@ -416,6 +595,45 @@ async def resumen_caja(fecha: str = None):
         "top_productos": top_productos,
         "total_dia": (canchas.get("cobrado") or 0) + (bufet.get("total_bufet") or 0)
     }
+
+@app.get("/api/mp/ingresos")
+async def mp_ingresos(fecha: str = None):
+    """Consulta pagos aprobados del día directamente en MercadoPago."""
+    import os, httpx
+    token = os.getenv("MP_ACCESS_TOKEN", "")
+    if not token:
+        return {"ok": False, "error": "Sin token MP", "total": 0, "cantidad": 0}
+
+    if not fecha:
+        fecha = date.today().isoformat()
+
+    # Argentina es UTC-3
+    begin = f"{fecha}T00:00:00.000-03:00"
+    end   = f"{fecha}T23:59:59.999-03:00"
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            res = await client.get(
+                "https://api.mercadopago.com/v1/payments/search",
+                headers={"Authorization": f"Bearer {token}"},
+                params={
+                    "range": "date_created",
+                    "begin_date": begin,
+                    "end_date": end,
+                    "status": "approved",
+                    "limit": 100
+                }
+            )
+        if res.status_code != 200:
+            return {"ok": False, "error": f"MP error {res.status_code}", "total": 0, "cantidad": 0}
+
+        data = res.json()
+        resultados = data.get("results", [])
+        total = sum(float(p.get("transaction_amount", 0)) for p in resultados)
+        cantidad = len(resultados)
+        return {"ok": True, "total": total, "cantidad": cantidad, "fecha": fecha}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "total": 0, "cantidad": 0}
 
 @app.get("/api/caja/semana")
 async def resumen_semana(desde: str, hasta: str):

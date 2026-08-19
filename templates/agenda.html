@@ -100,11 +100,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function irHoy() {
   const hoy = new Date();
-  const dia = hoy.getDay(); // 0=dom ... 6=sab
-  const diasDesdeMartes = (dia - 2 + 7) % 7;
-  const martes = new Date(hoy);
-  martes.setDate(hoy.getDate() - diasDesdeMartes);
-  semanaActual = martes.toISOString().slice(0,10);
+  const dia = hoy.getDay(); // 0=dom, 1=lun ... 6=sab
+  // Encontrar el lunes de esta semana
+  const diasDesdeLunes = (dia - 1 + 7) % 7;
+  const lunes = new Date(hoy);
+  lunes.setDate(hoy.getDate() - diasDesdeLunes);
+  semanaActual = lunes.toISOString().slice(0,10);
   cargarAgenda();
 }
 

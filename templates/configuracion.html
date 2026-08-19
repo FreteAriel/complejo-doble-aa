@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+{% set active = "configuracion" %}
+
+{% block head %}
+<style>
+  .config-section {
+    background: var(--blanco);
+    border: 1px solid var(--borde);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .config-section-header {
+    background: var(--celeste);
+    color: #fff;
+    padding: 12px 20px;
+    font-weight: 700;
+    font-size: .95rem;
+  }
+  .config-section-body { padding: 20px; }
+
+  .perm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+  }
+  .perm-chip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border: 2px solid var(--borde);
+    border-radius: 8px; cursor: pointer; font-size: .84rem;
+    font-weight: 600; transition: .15s; user-select: none;
+    background: var(--gris-suave);
+  }
+  .perm-chip.active {
+    border-color: var(--celeste);
+    background: var(--celeste-claro);
+    color: var(--celeste-oscuro);
+  }
+  .perm-chip input { display: none; }
+
+  .op-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 1px solid var(--borde);
+  }
+  .op-row:last-child { border-bottom: none; }
+  .op-badge { font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+  .op-admin { background: #D6FAE8; color: #0A6B35; }
+  .op-normal { background: var(--celeste-claro); color: var(--celeste-oscuro); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-2 mb-4">
+  <h4 class="fw-bold mb-0"><i class="bi bi-gear me-2 text-celeste-o"></i>Configuración</h4>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+
+    <!-- MP Config -->
+    <div class="config-section">
+      <div class="config-section-header"><i class="bi bi-credit-card me-2"></i>Configuración — Mercado Pago</div>
+      <div class="config-section-body">
+        <p class="text-muted small mb-3">
+          Pegá acá el <strong>Access Token de Producción</strong> de tu cuenta de MercadoPago.<br>
+          Lo encontrás en <a href="https://www.mercadopago.com.ar/developers/panel/app" target="_blank">mercadopago.com.ar → Desarrolladores → Credenciales</a>.
+        </p>
+        <label class="form-label fw-semibold small">Access Token de Mercado Pago</label>
+        <div class="input-group mb-1">
+          <input type="password" class="form-control" id="mp-token" placeholder="APP_USR-..."/>
+          <button class="btn btn-outline-secondary" type="button" onclick="toggleToken()">
+            <i class="bi bi-eye" id="eye-icon"></i>
+          </button>
+        </div>
+        <small class="text-muted">Empieza con <code>APP_USR-</code> (producción) o <code>TEST-</code> (pruebas).</small>
+        <div class="d-flex gap-2 mt-3">
+          <button class="btn btn-celeste flex-grow-1" onclick="guardarMP()">
+            <i class="bi bi-floppy me-1"></i>Guardar
+          </button>
+          <button class="btn btn-outline-secondary" onclick="probarMP()">
+            <i class="bi bi-wifi me-1"></i>Probar conexión
+          </button>
+        </div>
+        <div id="mp-resultado" class="mt-2 small" style="display:none"></div>
+      </div>
+    </div>
+
+  </div>
+  <div class="col-lg-6">
+
+    <!-- Operadores -->
+    <div class="config-section">
+      <div class="config-section-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-people me-2"></i>Operadores del sistema</span>
+        <button class="btn btn-sm btn-light fw-bold" onclick="abrirModalOperador()">
+          <i class="bi bi-person-plus me-1"></i>Agregar operador
+        </button>
+      </div>
+      <div class="config-section-body p-0">
+        <div id="lista-operadores" class="px-4 py-2">
+          <div class="text-center text-muted py-4 small"><i class="bi bi-people d-block fs-3 mb-1"></i>Sin operadores</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Modal Operador -->
+<div class="modal fade" id="modalOperador" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header" style="background:var(--celeste);color:#fff">
+        <h5 class="modal-title fw-bold" id="modal-op-titulo"><i class="bi bi-person-plus me-2"></i>Nuevo Operador</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="op-id"/>
+        <div class="row g-3 mb-3">
+          <div class="col-6">
+            <label class="form-label fw-semibold small">Nombre *</label>
+            <input type="text" class="form-control" id="op-nombre" placeholder="Nombre"/>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold small">Apellido</label>
+            <input type="text" class="form-control" id="op-apellido" placeholder="Apellido"/>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold small">Email (usuario) *</label>
+            <input type="email" class="form-control" id="op-email" placeholder="usuario@mail.com"/>
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold small">Clave <span class="text-muted" id="clave-hint">(obligatoria para nuevo usuario)</span></label>
+            <input type="password" class="form-control" id="op-clave" placeholder="••••••••"/>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="op-admin" onchange="toggleAdmin(this.checked)"/>
+            <label class="form-check-label fw-semibold" for="op-admin">
+              Administrador (acceso total — ignora los permisos de abajo)
+            </label>
+          </div>
+        </div>
+
+        <div id="permisos-section">
+          <label class="form-label fw-semibold small text-muted text-uppercase" style="letter-spacing:.5px">Permisos por sección</label>
+          <div class="d-flex gap-2 mb-2">
+            <button class="btn btn-sm btn-outline-secondary py-0" onclick="selTodos(true)"><i class="bi bi-check-all me-1"></i>Todos</button>
+            <button class="btn btn-sm btn-outline-secondary py-0" onclick="selTodos(false)"><i class="bi bi-x me-1"></i>Ninguno</button>
+          </div>
+          <div class="perm-grid" id="permisos-grid"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-danger me-auto btn-sm" id="btn-eliminar-op" onclick="eliminarOperador()" style="display:none">
+          <i class="bi bi-trash me-1"></i>Eliminar
+        </button>
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-celeste" onclick="guardarOperador()">
+          <i class="bi bi-floppy me-1"></i>Guardar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SECCIONES = [
+  {key:"agenda",       label:"Agenda",       icon:"bi-calendar3"},
+  {key:"nueva_venta",  label:"Nueva Venta",  icon:"bi-cart-plus"},
+  {key:"productos",    label:"Productos",    icon:"bi-box-seam"},
+  {key:"bufet",        label:"Bufet",        icon:"bi-cup-straw"},
+  {key:"clientes",     label:"Clientes",     icon:"bi-people"},
+  {key:"caja",         label:"Caja",         icon:"bi-cash-coin"},
+  {key:"configuracion",label:"Configuración",icon:"bi-gear"},
+];
+
+let modalBS;
+document.addEventListener("DOMContentLoaded", () => {
+  modalBS = new bootstrap.Modal(document.getElementById("modalOperador"));
+  cargarConfig();
+  cargarOperadores();
+  renderPermisosGrid([]);
+});
+
+// ── MP Config ──
+async function cargarConfig() {
+  const res = await fetch("/api/configuracion");
+  const d   = await res.json();
+  if (d.mp_token) document.getElementById("mp-token").value = d.mp_token;
+}
+function toggleToken() {
+  const inp = document.getElementById("mp-token");
+  const ico = document.getElementById("eye-icon");
+  if (inp.type === "password") { inp.type = "text"; ico.className = "bi bi-eye-slash"; }
+  else { inp.type = "password"; ico.className = "bi bi-eye"; }
+}
+async function guardarMP() {
+  const token = document.getElementById("mp-token").value.trim();
+  await fetch("/api/configuracion", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({mp_token: token})
+  });
+  mostrarResultado("mp-resultado", true, "Token guardado correctamente");
+}
+async function probarMP() {
+  const token = document.getElementById("mp-token").value.trim();
+  mostrarResultado("mp-resultado", null, "Probando conexión…");
+  const res = await fetch("/api/configuracion/probar-mp", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({token})
+  });
+  const d = await res.json();
+  if (d.ok) mostrarResultado("mp-resultado", true, `✅ Conectado — ${d.email || "cuenta verificada"}`);
+  else mostrarResultado("mp-resultado", false, `❌ ${d.error}`);
+}
+function mostrarResultado(id, ok, msg) {
+  const el = document.getElementById(id);
+  el.style.display = "block";
+  el.className = `mt-2 small fw-bold ${ok === true ? "text-success" : ok === false ? "text-danger" : "text-muted"}`;
+  el.textContent = msg;
+}
+
+// ── Operadores ──
+let operadores = [];
+async function cargarOperadores() {
+  const res = await fetch("/api/operadores");
+  operadores = await res.json();
+  renderOperadores();
+}
+function renderOperadores() {
+  const cont = document.getElementById("lista-operadores");
+  if (!operadores.length) {
+    cont.innerHTML = '<div class="text-center text-muted py-4 small"><i class="bi bi-people d-block fs-3 mb-1"></i>Sin operadores</div>';
+    return;
+  }
+  cont.innerHTML = operadores.map(op => `
+    <div class="op-row px-4">
+      <div>
+        <span class="fw-semibold">${op.nombre} ${op.apellido}</span>
+        <span class="op-badge ms-2 ${op.es_admin ? 'op-admin' : 'op-normal'}">${op.es_admin ? 'Admin' : 'Operador'}</span>
+        <div class="text-muted small">${op.email}</div>
+        ${!op.es_admin ? `<div class="text-muted" style="font-size:.72rem">${(op.permisos||[]).length} permisos asignados</div>` : ''}
+      </div>
+      <button class="btn btn-outline-secondary btn-sm" onclick="editarOperador(${op.id})">
+        <i class="bi bi-pencil"></i>
+      </button>
+    </div>`).join("");
+}
+
+// ── Modal operador ──
+function renderPermisosGrid(activos) {
+  document.getElementById("permisos-grid").innerHTML = SECCIONES.map(s => {
+    const on = activos.includes(s.key);
+    return `<label class="perm-chip ${on ? 'active' : ''}" onclick="togglePerm(this,'${s.key}')">
+      <i class="bi ${s.icon}"></i>${s.label}
+      <input type="checkbox" ${on ? 'checked' : ''}/>
+    </label>`;
+  }).join("");
+}
+function togglePerm(el, key) {
+  el.classList.toggle("active");
+  el.querySelector("input").checked = el.classList.contains("active");
+}
+function selTodos(val) {
+  document.querySelectorAll(".perm-chip").forEach(el => {
+    el.classList.toggle("active", val);
+    el.querySelector("input").checked = val;
+  });
+}
+function toggleAdmin(isAdmin) {
+  document.getElementById("permisos-section").style.opacity = isAdmin ? ".4" : "1";
+  document.getElementById("permisos-section").style.pointerEvents = isAdmin ? "none" : "auto";
+}
+function getPermisosActivos() {
+  return SECCIONES.filter((s, i) =>
+    document.querySelectorAll(".perm-chip")[i]?.classList.contains("active")
+  ).map(s => s.key);
+}
+
+function abrirModalOperador() {
+  document.getElementById("op-id").value = "";
+  document.getElementById("op-nombre").value = "";
+  document.getElementById("op-apellido").value = "";
+  document.getElementById("op-email").value = "";
+  document.getElementById("op-clave").value = "";
+  document.getElementById("op-admin").checked = false;
+  document.getElementById("clave-hint").textContent = "(obligatoria para nuevo usuario)";
+  document.getElementById("btn-eliminar-op").style.display = "none";
+  document.getElementById("modal-op-titulo").innerHTML = '<i class="bi bi-person-plus me-2"></i>Nuevo Operador';
+  toggleAdmin(false);
+  renderPermisosGrid([]);
+  modalBS.show();
+}
+function editarOperador(id) {
+  const op = operadores.find(o => o.id === id);
+  if (!op) return;
+  document.getElementById("op-id").value = op.id;
+  document.getElementById("op-nombre").value = op.nombre;
+  document.getElementById("op-apellido").value = op.apellido || "";
+  document.getElementById("op-email").value = op.email;
+  document.getElementById("op-clave").value = "";
+  document.getElementById("op-admin").checked = !!op.es_admin;
+  document.getElementById("clave-hint").textContent = "(dejá vacío para no cambiar)";
+  document.getElementById("btn-eliminar-op").style.display = "";
+  document.getElementById("modal-op-titulo").innerHTML = '<i class="bi bi-pencil-square me-2"></i>Editar Operador';
+  toggleAdmin(!!op.es_admin);
+  renderPermisosGrid(op.permisos || []);
+  modalBS.show();
+}
+
+async function guardarOperador() {
+  const id = document.getElementById("op-id").value;
+  const nombre = document.getElementById("op-nombre").value.trim();
+  const email  = document.getElementById("op-email").value.trim();
+  const clave  = document.getElementById("op-clave").value;
+  if (!nombre || !email) { alert("Nombre y email son obligatorios"); return; }
+  if (!id && !clave) { alert("La clave es obligatoria para nuevo operador"); return; }
+
+  const body = {
+    nombre,
+    apellido: document.getElementById("op-apellido").value.trim(),
+    email,
+    es_admin: document.getElementById("op-admin").checked ? 1 : 0,
+    permisos: getPermisosActivos()
+  };
+  if (clave) body.clave = clave;
+
+  const url = id ? `/api/operadores/${id}` : "/api/operadores";
+  const method = id ? "PUT" : "POST";
+  const res = await fetch(url, {
+    method, headers: {"Content-Type":"application/json"}, body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const d = await res.json();
+    alert(d.detail || "Error al guardar");
+    return;
+  }
+  modalBS.hide();
+  await cargarOperadores();
+}
+
+async function eliminarOperador() {
+  const id = document.getElementById("op-id").value;
+  if (!id || !confirm("¿Eliminar este operador?")) return;
+  await fetch(`/api/operadores/${id}`, {method:"DELETE"});
+  modalBS.hide();
+  await cargarOperadores();
+}
+</script>
+{% endblock %}

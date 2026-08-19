@@ -6,6 +6,23 @@
   <input type="date" class="form-control form-control-sm" id="fecha-caja" style="width:160px"/>
 </div>
 
+<!-- Widget MP Real -->
+<div class="row g-3 mb-3">
+  <div class="col-12 col-md-4">
+    <div class="card p-3 text-center" id="card-mp" style="border-left:4px solid #009EE3">
+      <div class="small text-muted mb-1" style="letter-spacing:.5px;text-transform:uppercase;font-size:.72rem">
+        <img src="https://http2.mlstatic.com/frontend-assets/mp-melidata/main.3.27.3.js" onerror="this.style.display='none'" style="height:14px;margin-right:4px"/>
+        MP Real
+      </div>
+      <div class="fw-bold" style="font-size:1.7rem;color:#009EE3" id="mp-total">—</div>
+      <div class="small text-muted" id="mp-detalle">cargando…</div>
+      <button class="btn btn-sm btn-outline-secondary mt-2 py-0" style="font-size:.72rem" onclick="cargarMP()">
+        <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Resumen del día -->
 <div class="row g-3 mb-4" id="cards-dia"></div>
 
@@ -38,9 +55,31 @@ const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov"
 document.addEventListener("DOMContentLoaded", () => {
   const hoy = new Date().toISOString().slice(0,10);
   document.getElementById("fecha-caja").value = hoy;
-  document.getElementById("fecha-caja").addEventListener("change", cargarCaja);
+  document.getElementById("fecha-caja").addEventListener("change", () => { cargarCaja(); cargarMP(); });
   cargarCaja();
+  cargarMP();
 });
+
+async function cargarMP() {
+  const fecha = document.getElementById("fecha-caja").value;
+  document.getElementById("mp-total").textContent = "…";
+  document.getElementById("mp-detalle").textContent = "consultando MP…";
+  try {
+    const res = await fetch(`/api/mp/ingresos?fecha=${fecha}`);
+    const d = await res.json();
+    if (d.ok) {
+      document.getElementById("mp-total").textContent = "$" + Number(d.total).toLocaleString("es-AR", {minimumFractionDigits:2, maximumFractionDigits:2});
+      const ahora = new Date().toLocaleTimeString("es-AR", {hour:"2-digit", minute:"2-digit"});
+      document.getElementById("mp-detalle").textContent = `${d.cantidad} pago${d.cantidad!==1?"s":""} aprobados · ${ahora}`;
+    } else {
+      document.getElementById("mp-total").textContent = "—";
+      document.getElementById("mp-detalle").textContent = d.error || "Sin datos";
+    }
+  } catch(e) {
+    document.getElementById("mp-total").textContent = "—";
+    document.getElementById("mp-detalle").textContent = "Error de conexión";
+  }
+}
 
 async function cargarCaja() {
   const fecha = document.getElementById("fecha-caja").value;

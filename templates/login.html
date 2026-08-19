@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ingresar — Complejo Doble AA</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    body { background: #EBF6FD; font-family: 'Inter', sans-serif; }
+    .login-card { max-width: 380px; margin: 80px auto; border-radius: 18px; border: 1px solid #D0E8F5; }
+    .brand { color: #4AADDC; font-weight: 800; font-size: 1.3rem; }
+  </style>
+</head>
+<body>
+<div class="login-card card shadow p-4">
+  <div class="text-center mb-4">
+    <div class="brand"><i class="bi bi-circle-fill me-1" style="font-size:.6rem;opacity:.6"></i><i class="bi bi-circle-fill me-2" style="font-size:.6rem;opacity:.6"></i>Complejo Doble AA</div>
+    <p class="text-muted small mt-1">Ingresá con tu usuario</p>
+  </div>
+  <div id="error-msg" class="alert alert-danger py-2 small" style="display:none"></div>
+  <div class="mb-3">
+    <label class="form-label fw-semibold small">Email</label>
+    <input type="email" class="form-control" id="email" placeholder="usuario@mail.com"/>
+  </div>
+  <div class="mb-4">
+    <label class="form-label fw-semibold small">Clave</label>
+    <input type="password" class="form-control" id="clave" placeholder="••••••••" onkeydown="if(event.key==='Enter')login()"/>
+  </div>
+  <button class="btn w-100 fw-bold py-2" style="background:#4AADDC;color:#fff;border-radius:10px" onclick="login()">
+    <i class="bi bi-box-arrow-in-right me-2"></i>Ingresar
+  </button>
+</div>
+<script>
+async function login() {
+  const email = document.getElementById("email").value.trim();
+  const clave = document.getElementById("clave").value;
+  const err   = document.getElementById("error-msg");
+  if (!email || !clave) { err.textContent="Completá email y clave"; err.style.display="block"; return; }
+  const res = await fetch("/api/login", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({email, clave})
+  });
+  if (res.ok) {
+    window.location.href = "/agenda";
+  } else {
+    const d = await res.json();
+    err.textContent = d.detail || "Email o clave incorrectos";
+    err.style.display = "block";
+  }
+}
+</script>
+</body>
+</html>
