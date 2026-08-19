@@ -12,7 +12,6 @@ from mercadopago_service import router as mp_router, crear_link_pago
 app = FastAPI(title="Complejo Doble AA")
 app.include_router(bot_router)
 app.include_router(mp_router)
-app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 HORARIOS = ["17", "18", "19", "20", "21", "22", "23"]
