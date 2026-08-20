@@ -469,15 +469,6 @@ async function getTurnosLibresHoy() {
   }
 }
 
-function getLunesDe(fechaStr) {
-  const [y, mo, d] = fechaStr.split('-').map(Number)
-  const dt = new Date(y, mo - 1, d)
-  const dow = dt.getDay()
-  const diasDesdeLunes = (dow + 6) % 7
-  dt.setDate(dt.getDate() - diasDesdeLunes)
-  return dt.toISOString().slice(0, 10)
-}
-
 // ── Envío masivo a clientes ───────────────────────────────────────
 async function enviarAClientes(sock, mensaje) {
   const clientes = await obtenerClientesConTelefono()
