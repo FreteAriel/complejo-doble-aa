@@ -588,7 +588,7 @@ async function connectToWhatsApp() {
   sock.ev.on('creds.update', saveCreds)
 
   // ── Eventos de conexión ───────────────────────────────────────
-  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+  sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     // Generar QR como PNG y servirlo en el servidor web
     if (qr) {
       try {
