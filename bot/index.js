@@ -579,26 +579,27 @@ async function connectToWhatsApp() {
     } else {
       const phoneClean = BOT_PHONE.replace(/\D/g, '')
       console.log(`📱 Solicitando código de vinculación para: ${phoneClean}`)
-      // IMPORTANTE: llamar requestPairingCode SIN delay previo.
-      // Baileys lo encola internamente hasta que la WS esté lista.
-      // Esperar 3s hace que el handshake de auth arranque primero → cuelgue.
-      const pairingTimeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout 30s — sin respuesta de WhatsApp')), 30000)
-      )
-      try {
-        const code = await Promise.race([sock.requestPairingCode(phoneClean), pairingTimeout])
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-        console.log(`🔑 CÓDIGO DE VINCULACIÓN: ${code}`)
-        console.log('   → Abrí WhatsApp en el celular del bot')
-        console.log('   → Menú → Dispositivos vinculados → Vincular con número de teléfono')
-        console.log('   → Ingresá el código de arriba')
-        console.log('   ⏰ Tenés ~2 minutos para usarlo antes de que expire')
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-      } catch (e) {
-        console.error('❌ Error solicitando código de vinculación:', e.message)
-        console.error('   Verificá que BOT_PHONE_NUMBER tenga solo dígitos con código de país')
-        console.error('   Ejemplo correcto: 5491127471538')
-      }
+      // Esperar 1.5s para que la WS de Baileys esté lista antes de pedir el código.
+      // 0ms → "Connection Closed" (WS no lista). 3000ms+ → auth ya arrancó → cuelgue.
+      setTimeout(async () => {
+        try {
+          const pairingTimeout = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout 30s')), 30000)
+          )
+          const code = await Promise.race([sock.requestPairingCode(phoneClean), pairingTimeout])
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+          console.log(`🔑 CÓDIGO DE VINCULACIÓN: ${code}`)
+          console.log('   → Abrí WhatsApp en el celular del bot')
+          console.log('   → Menú → Dispositivos vinculados → Vincular con número de teléfono')
+          console.log('   → Ingresá el código de arriba')
+          console.log('   ⏰ Tenés ~2 minutos para usarlo antes de que expire')
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        } catch (e) {
+          console.error('❌ Error solicitando código de vinculación:', e.message)
+          console.error('   Verificá que BOT_PHONE_NUMBER tenga solo dígitos con código de país')
+          console.error('   Ejemplo correcto: 5491127471538')
+        }
+      }, 1500)
     }
   }
 
