@@ -17,6 +17,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import pino from 'pino'
+import qrcode from 'qrcode-terminal'
 
 // ── Config ────────────────────────────────────────────────────────
 const API_URL     = process.env.API_URL    || 'https://complejo-doble-aa-production.up.railway.app'
@@ -562,7 +563,7 @@ async function connectToWhatsApp() {
   const sock = makeWASocket({
     auth: state,
     logger: pino({ level: 'silent' }),
-    printQRInTerminal: true,
+    printQRInTerminal: false,
     browser: ['Complejo Doble AA Bot', 'Chrome', '1.0.0']
   })
 
@@ -570,15 +571,13 @@ async function connectToWhatsApp() {
 
   // ── Eventos de conexión ───────────────────────────────────────
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    // Mostrar QR como link escaneable
+    // Mostrar QR como ASCII en los logs para escanear con el celular
     if (qr) {
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-      console.log('📷 ESCANEÁ EL QR CON WHATSAPP:')
-      console.log(`   ${qrUrl}`)
-      console.log('   → Abrí el link en el navegador')
-      console.log('   → Escaneá el QR con WhatsApp → Dispositivos vinculados → Vincular dispositivo')
-      console.log('   ⏰ El QR expira en 60 segundos — si expira redesplegá')
+      console.log('📷 ESCANEÁ ESTE QR CON WHATSAPP:')
+      console.log('   WhatsApp → Dispositivos vinculados → Vincular dispositivo')
+      console.log('   ⏰ Expira en 60s — si expira, hacé Redeploy')
+      qrcode.generate(qr, { small: true })
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     }
     if (connection === 'close') {
