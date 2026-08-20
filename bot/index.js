@@ -562,7 +562,7 @@ async function connectToWhatsApp() {
   const sock = makeWASocket({
     auth: state,
     logger: pino({ level: 'silent' }),
-    printQRInTerminal: false,
+    printQRInTerminal: true,
     browser: ['Complejo Doble AA Bot', 'Chrome', '1.0.0']
   })
 
