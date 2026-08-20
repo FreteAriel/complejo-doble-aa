@@ -1,6 +1,13 @@
 /**
  * WhatsApp Bot — Complejo Doble AA
  * Usa Baileys (multi-device, sin Chromium)
+ *
+ * AUTENTICACIÓN EN RAILWAY:
+ *   1. Montá un Volume en Railway apuntando a /app/auth_info
+ *   2. Seteá la variable BOT_PHONE_NUMBER con el número del bot (ej: 5491112345678)
+ *   3. Al primer arranque aparece en los logs: 🔑 CÓDIGO DE VINCULACIÓN: XXXX-XXXX
+ *   4. Ingresalo en WhatsApp → Dispositivos vinculados → Vincular con número de teléfono
+ *   5. La sesión queda guardada en el Volume y no hace falta repetir el proceso
  */
 
 import makeWASocket, {
@@ -12,13 +19,32 @@ import { Boom } from '@hapi/boom'
 import pino from 'pino'
 
 // ── Config ────────────────────────────────────────────────────────
-const API_URL    = process.env.API_URL    || 'https://complejo-doble-aa-production.up.railway.app'
-const MP_TOKEN   = process.env.MP_ACCESS_TOKEN || ''
-const ALIAS_MP   = process.env.ALIAS_MP   || 'complejo.a'
-const TITULAR_MP = process.env.TITULAR_MP || 'Distriviandas SA'
+const API_URL     = process.env.API_URL    || 'https://complejo-doble-aa-production.up.railway.app'
+const MP_TOKEN    = process.env.MP_ACCESS_TOKEN || ''
+const ALIAS_MP    = process.env.ALIAS_MP   || 'complejo.a'
+const TITULAR_MP  = process.env.TITULAR_MP || 'Distriviandas SA'
 const MONTO_SENIA = parseInt(process.env.MONTO_SENIA || '10000')
-const HORARIOS   = [17, 18, 19, 20, 21, 22, 23]
-const CANCHAS    = [1, 2]
+// Número del bot SIN + ni espacios, ej: 5491127471538
+// Necesario solo para el primer arranque (vinculación)
+const BOT_PHONE   = process.env.BOT_PHONE_NUMBER || ''
+
+const HORARIOS = [17, 18, 19, 20, 21, 22, 23]
+const CANCHAS  = [1, 2]
+
+// ── Difusión automática ────────────────────────────────────────────
+// Horas en que se mandan mensajes a clientes (hora Argentina, UTC-3)
+const HORAS_DIFUSION = (process.env.HORAS_DIFUSION || '10,13')
+  .split(',').map(h => parseInt(h.trim()))
+
+// Mensaje configurable por variable de entorno, o el default
+const MENSAJE_DIFUSION = process.env.MENSAJE_DIFUSION ||
+  `¡Hola! 👋 Soy el bot del *Complejo Doble AA*.\n\n` +
+  `⚽ Tenemos turnos disponibles para hoy y esta semana.\n` +
+  `¿Te anotamos? Escribime el día y el horario que preferís.\n\n` +
+  `_(Respondé *STOP* si no querés recibir más mensajes)_`
+
+// Registro para no mandar 2 veces en el mismo día/hora
+const difusionEnviada = new Set() // "YYYY-MM-DD_HH"
 
 // ── Estado por usuario ────────────────────────────────────────────
 // states: INIT | AWAITING_DAY | SHOWING_AVAILABILITY | AWAITING_PAYMENT | AWAITING_NAME | DONE
@@ -57,7 +83,6 @@ function getSaludo() {
 }
 
 function hoy() {
-  // Fecha argentina
   const d = new Date(new Date().getTime() - 3 * 60 * 60 * 1000)
   return d.toISOString().slice(0, 10)
 }
@@ -109,7 +134,7 @@ function formatDateSpanish(dateStr) {
 function getLunesDe(fechaStr) {
   const [y, mo, d] = fechaStr.split('-').map(Number)
   const dt = new Date(y, mo - 1, d)
-  const dow = dt.getDay() // 0=dom
+  const dow = dt.getDay()
   const diasDesdeLunes = (dow + 6) % 7
   dt.setDate(dt.getDate() - diasDesdeLunes)
   return dt.toISOString().slice(0, 10)
@@ -122,7 +147,6 @@ async function getDisponibilidad(fecha) {
     const res = await fetch(`${API_URL}/api/agenda?semana=${lunes}`)
     const data = await res.json()
 
-    // data = { dias: [...], reservas: [...] }
     const ocupados = new Set()
     for (const r of (data.reservas || [])) {
       if (r.fecha === fecha && r.estado !== 'cancelado') {
@@ -152,7 +176,7 @@ async function verificarPagoMP() {
   }
   try {
     const now = new Date()
-    const since = new Date(now.getTime() - 40 * 60 * 1000) // 40 min atrás
+    const since = new Date(now.getTime() - 40 * 60 * 1000)
     const url = `https://api.mercadopago.com/v1/payments/search?status=approved&sort=date_created&criteria=desc&range=date_created&begin_date=${since.toISOString()}&end_date=${now.toISOString()}`
     const res = await fetch(url, { headers: { Authorization: `Bearer ${MP_TOKEN}` } })
     const data = await res.json()
@@ -211,6 +235,13 @@ async function handleMessage(sock, msg) {
     await sock.sendMessage(jid, { text: txt })
   }
 
+  // Comando STOP — opt-out de difusión
+  if (text.toLowerCase() === 'stop') {
+    stopList.add(jid)
+    await send('✅ Listo, no te vamos a mandar más mensajes de difusión.\nSi querés reservar una cancha, escribinos cuando quieras.')
+    return
+  }
+
   // Comando reset
   if (text.toLowerCase() === '/reset' || text.toLowerCase() === 'cancelar') {
     resetSession(jid)
@@ -251,7 +282,6 @@ async function handleMessage(sock, msg) {
       return
     }
 
-    // Agrupar por hora
     const byHora = {}
     libres.forEach(({ hora, cancha }) => {
       if (!byHora[hora]) byHora[hora] = []
@@ -373,6 +403,167 @@ async function handleMessage(sock, msg) {
   }
 }
 
+// ── Lista STOP (opt-out de difusión) ─────────────────────────────
+const stopList = new Set() // jids que no quieren recibir difusiones
+
+// ── Difusión automática ───────────────────────────────────────────
+async function obtenerClientesConTelefono() {
+  try {
+    const res = await fetch(`${API_URL}/api/clientes`)
+    if (!res.ok) return []
+    const clientes = await res.json()
+    // Solo los que tienen teléfono cargado
+    return clientes.filter(c => c.telefono && c.telefono.trim() !== '')
+  } catch (e) {
+    console.error('Error obteniendo clientes:', e.message)
+    return []
+  }
+}
+
+function formatearJid(telefono) {
+  // Limpiar el número: solo dígitos, agregar @s.whatsapp.net
+  const limpio = telefono.replace(/\D/g, '')
+  // Si empieza con 0 (ej: 011...), quitarlo y agregar 54 (Argentina)
+  let numero = limpio
+  if (numero.startsWith('0')) numero = '54' + numero.slice(1)
+  // Si no tiene código de país (menos de 11 dígitos), asumir Argentina
+  if (numero.length <= 10) numero = '54' + numero
+  // WhatsApp Argentina: el 9 va después del 54 para celulares
+  // ej: 54 9 11 2747-1538 → 5491127471538
+  return `${numero}@s.whatsapp.net`
+}
+
+// ── Consulta turnos libres de hoy ─────────────────────────────────
+async function getTurnosLibresHoy() {
+  try {
+    const ahora = new Date(new Date().getTime() - 3 * 60 * 60 * 1000)
+    const fecha = ahora.toISOString().slice(0, 10)
+    const horaActual = ahora.getUTCHours()
+
+    const lunes = getLunesDe(fecha)
+    const res = await fetch(`${API_URL}/api/agenda?semana=${lunes}`)
+    if (!res.ok) return []
+    const data = await res.json()
+
+    const ocupados = new Set()
+    for (const r of (data.reservas || [])) {
+      if (r.fecha === fecha && r.estado !== 'cancelado') {
+        ocupados.add(`${r.hora}-${r.cancha}`)
+      }
+    }
+
+    // Solo horarios FUTUROS a partir de la hora actual + 1
+    const libres = []
+    for (const hora of HORARIOS) {
+      if (hora <= horaActual) continue  // Ya pasó o es la hora actual
+      for (const cancha of CANCHAS) {
+        if (!ocupados.has(`${hora}-${cancha}`)) {
+          libres.push({ hora, cancha })
+        }
+      }
+    }
+    return libres
+  } catch (e) {
+    console.error('Error consultando disponibilidad:', e.message)
+    return []
+  }
+}
+
+function getLunesDe(fechaStr) {
+  const [y, mo, d] = fechaStr.split('-').map(Number)
+  const dt = new Date(y, mo - 1, d)
+  const dow = dt.getDay()
+  const diasDesdeLunes = (dow + 6) % 7
+  dt.setDate(dt.getDate() - diasDesdeLunes)
+  return dt.toISOString().slice(0, 10)
+}
+
+// ── Envío masivo a clientes ───────────────────────────────────────
+async function enviarAClientes(sock, mensaje) {
+  const clientes = await obtenerClientesConTelefono()
+  if (clientes.length === 0) {
+    console.log('📣 No hay clientes con teléfono. Cargalos en panel → Clientes.')
+    return
+  }
+
+  let enviados = 0, omitidos = 0, errores = 0
+
+  for (const cliente of clientes) {
+    const jid = formatearJid(cliente.telefono)
+    if (stopList.has(jid)) { omitidos++; continue }
+
+    try {
+      const nombre = cliente.nombre.split(' ')[0]
+      await sock.sendMessage(jid, { text: `Hola *${nombre}*! ${mensaje}` })
+      enviados++
+      // Pausa anti-spam: 2 a 4 segundos entre mensajes
+      await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000))
+    } catch (e) {
+      console.error(`Error enviando a ${cliente.nombre}:`, e.message)
+      errores++
+    }
+  }
+  return { enviados, omitidos, errores }
+}
+
+// ── Difusión principal ────────────────────────────────────────────
+async function enviarDifusion(sock) {
+  // Hora actual Argentina (UTC-3)
+  const ahora = new Date(new Date().getTime() - 3 * 60 * 60 * 1000)
+  const hora  = ahora.getUTCHours()
+  const fecha = ahora.toISOString().slice(0, 10)
+  const clave = `${fecha}_${hora}`
+
+  // ── Difusión general: 10hs y 13hs ───────────────────────────────
+  if (HORAS_DIFUSION.includes(hora) && !difusionEnviada.has(clave)) {
+    difusionEnviada.add(clave)
+    console.log(`📣 Difusión general de las ${hora}hs...`)
+    const r = await enviarAClientes(sock, MENSAJE_DIFUSION)
+    console.log(`📣 ${hora}hs — ✅ ${r.enviados} enviados | ⛔ ${r.omitidos} opt-out | ❌ ${r.errores} errores`)
+    return
+  }
+
+  // ── Difusión de disponibilidad: 16hs ────────────────────────────
+  if (hora === 16 && !difusionEnviada.has(clave)) {
+    const libres = await getTurnosLibresHoy()
+    if (libres.length === 0) {
+      console.log('📣 16hs: No hay turnos libres esta noche, sin difusión.')
+      difusionEnviada.add(clave)
+      return
+    }
+
+    // Agrupar por hora
+    const byHora = {}
+    libres.forEach(({ hora, cancha }) => {
+      if (!byHora[hora]) byHora[hora] = []
+      byHora[hora].push(cancha)
+    })
+
+    let detalle = ''
+    Object.keys(byHora).sort((a,b) => a-b).forEach(h => {
+      const cs = byHora[h].sort()
+      detalle += `⚽ *${h}hs* — Cancha ${cs.join(' y ')}\n`
+    })
+
+    const mensaje =
+      `🔔 *¡Turnos disponibles para esta noche!*\n\n` +
+      detalle +
+      `\n¿Te anotamos? Escribime el horario que querés.\n` +
+      `_(Respondé *STOP* para no recibir más mensajes)_`
+
+    difusionEnviada.add(clave)
+    console.log(`📣 Difusión de disponibilidad 16hs — ${libres.length} turnos libres...`)
+    const r = await enviarAClientes(sock, mensaje)
+    console.log(`📣 16hs — ✅ ${r.enviados} enviados | ⛔ ${r.omitidos} opt-out | ❌ ${r.errores} errores`)
+  }
+}
+
+function iniciarSchedulerDifusion(sock) {
+  // Revisar cada minuto si es hora de mandar
+  setInterval(() => enviarDifusion(sock), 60 * 1000)
+  console.log(`⏰ Scheduler activo — difusión: ${HORAS_DIFUSION.join('hs, ')}hs | disponibilidad: 16hs (Argentina)`)
+}
+
 // ── Conexión WhatsApp ─────────────────────────────────────────────
 async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState('auth_info')
@@ -380,12 +571,47 @@ async function connectToWhatsApp() {
   const sock = makeWASocket({
     auth: state,
     logger: pino({ level: 'silent' }),
-    printQRInTerminal: true,
+    printQRInTerminal: false,  // deprecated — usamos pairing code
     browser: ['Complejo Doble AA Bot', 'Chrome', '1.0.0']
   })
 
   sock.ev.on('creds.update', saveCreds)
 
+  // ── Pairing code (solo si no hay sesión guardada) ─────────────
+  console.log(`🔍 Estado sesión: registered=${state.creds.registered}`)
+  if (!state.creds.registered) {
+    if (!BOT_PHONE) {
+      console.log('⚠️  No hay sesión guardada.')
+      console.log('   Seteá la variable BOT_PHONE_NUMBER en Railway con el número del bot')
+      console.log('   (solo los dígitos, sin + ni espacios, ej: 5491112345678)')
+      console.log('   Luego redesplegá para obtener el código de vinculación.')
+    } else {
+      const phoneClean = BOT_PHONE.replace(/\D/g, '')
+      console.log(`📱 Solicitando código de vinculación para: ${phoneClean}`)
+      // IMPORTANTE: llamar requestPairingCode SIN delay previo.
+      // Baileys lo encola internamente hasta que la WS esté lista.
+      // Esperar 3s hace que el handshake de auth arranque primero → cuelgue.
+      const pairingTimeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout 30s — sin respuesta de WhatsApp')), 30000)
+      )
+      try {
+        const code = await Promise.race([sock.requestPairingCode(phoneClean), pairingTimeout])
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        console.log(`🔑 CÓDIGO DE VINCULACIÓN: ${code}`)
+        console.log('   → Abrí WhatsApp en el celular del bot')
+        console.log('   → Menú → Dispositivos vinculados → Vincular con número de teléfono')
+        console.log('   → Ingresá el código de arriba')
+        console.log('   ⏰ Tenés ~2 minutos para usarlo antes de que expire')
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      } catch (e) {
+        console.error('❌ Error solicitando código de vinculación:', e.message)
+        console.error('   Verificá que BOT_PHONE_NUMBER tenga solo dígitos con código de país')
+        console.error('   Ejemplo correcto: 5491127471538')
+      }
+    }
+  }
+
+  // ── Eventos de conexión ───────────────────────────────────────
   sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
     if (connection === 'close') {
       const code = lastDisconnect?.error instanceof Boom
@@ -394,12 +620,13 @@ async function connectToWhatsApp() {
       const shouldReconnect = code !== DisconnectReason.loggedOut
       console.log(`🔌 Desconectado (código ${code}), reconectando: ${shouldReconnect}`)
       if (shouldReconnect) {
-        setTimeout(connectToWhatsApp, 3000)
+        setTimeout(connectToWhatsApp, 5000)
       } else {
-        console.log('❌ Sesión cerrada. Eliminá la carpeta auth_info y reiniciá para escanear el QR.')
+        console.log('❌ Sesión cerrada (logout). Eliminá la carpeta auth_info del Volume y redesplegá.')
       }
     } else if (connection === 'open') {
       console.log('✅ Bot conectado a WhatsApp — Complejo Doble AA')
+      iniciarSchedulerDifusion(sock)
     }
   })
 
