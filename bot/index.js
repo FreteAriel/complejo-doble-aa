@@ -562,49 +562,25 @@ async function connectToWhatsApp() {
   const sock = makeWASocket({
     auth: state,
     logger: pino({ level: 'silent' }),
-    printQRInTerminal: false,  // deprecated — usamos pairing code
+    printQRInTerminal: false,
     browser: ['Complejo Doble AA Bot', 'Chrome', '1.0.0']
   })
 
   sock.ev.on('creds.update', saveCreds)
 
-  // ── Pairing code (solo si no hay sesión guardada) ─────────────
-  console.log(`🔍 Estado sesión: registered=${state.creds.registered}`)
-  if (!state.creds.registered) {
-    if (!BOT_PHONE) {
-      console.log('⚠️  No hay sesión guardada.')
-      console.log('   Seteá la variable BOT_PHONE_NUMBER en Railway con el número del bot')
-      console.log('   (solo los dígitos, sin + ni espacios, ej: 5491112345678)')
-      console.log('   Luego redesplegá para obtener el código de vinculación.')
-    } else {
-      const phoneClean = BOT_PHONE.replace(/\D/g, '')
-      console.log(`📱 Solicitando código de vinculación para: ${phoneClean}`)
-      // Esperar 1.5s para que la WS de Baileys esté lista antes de pedir el código.
-      // 0ms → "Connection Closed" (WS no lista). 3000ms+ → auth ya arrancó → cuelgue.
-      setTimeout(async () => {
-        try {
-          const pairingTimeout = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout 30s')), 30000)
-          )
-          const code = await Promise.race([sock.requestPairingCode(phoneClean), pairingTimeout])
-          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-          console.log(`🔑 CÓDIGO DE VINCULACIÓN: ${code}`)
-          console.log('   → Abrí WhatsApp en el celular del bot')
-          console.log('   → Menú → Dispositivos vinculados → Vincular con número de teléfono')
-          console.log('   → Ingresá el código de arriba')
-          console.log('   ⏰ Tenés ~2 minutos para usarlo antes de que expire')
-          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-        } catch (e) {
-          console.error('❌ Error solicitando código de vinculación:', e.message)
-          console.error('   Verificá que BOT_PHONE_NUMBER tenga solo dígitos con código de país')
-          console.error('   Ejemplo correcto: 5491127471538')
-        }
-      }, 1500)
-    }
-  }
-
   // ── Eventos de conexión ───────────────────────────────────────
-  sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
+  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+    // Mostrar QR como link escaneable
+    if (qr) {
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      console.log('📷 ESCANEÁ EL QR CON WHATSAPP:')
+      console.log(`   ${qrUrl}`)
+      console.log('   → Abrí el link en el navegador')
+      console.log('   → Escaneá el QR con WhatsApp → Dispositivos vinculados → Vincular dispositivo')
+      console.log('   ⏰ El QR expira en 60 segundos — si expira redesplegá')
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    }
     if (connection === 'close') {
       const code = lastDisconnect?.error instanceof Boom
         ? lastDisconnect.error.output.statusCode
