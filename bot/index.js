@@ -17,7 +17,8 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import pino from 'pino'
-import qrcode from 'qrcode-terminal'
+import QRCode from 'qrcode'
+import http from 'http'
 
 // ── Config ────────────────────────────────────────────────────────
 const API_URL     = process.env.API_URL    || 'https://complejo-doble-aa-production.up.railway.app'
@@ -31,6 +32,23 @@ const BOT_PHONE   = process.env.BOT_PHONE_NUMBER || ''
 
 const HORARIOS = [17, 18, 19, 20, 21, 22, 23]
 const CANCHAS  = [1, 2]
+const PORT = process.env.PORT || 3000
+
+// ── Servidor QR ───────────────────────────────────────────────────
+// Sirve el QR como imagen PNG para escanear con el celular
+let qrPngBuffer = null
+const qrServer = http.createServer(async (req, res) => {
+  if (qrPngBuffer) {
+    res.writeHead(200, { 'Content-Type': 'image/png' })
+    res.end(qrPngBuffer)
+  } else {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+    res.end('<h2>⏳ Esperando QR... refrescá en unos segundos</h2>')
+  }
+})
+qrServer.listen(PORT, () => {
+  console.log(`🌐 Servidor QR escuchando en puerto ${PORT}`)
+})
 
 // ── Difusión automática ────────────────────────────────────────────
 // Horas en que se mandan mensajes a clientes (hora Argentina, UTC-3)
@@ -571,14 +589,18 @@ async function connectToWhatsApp() {
 
   // ── Eventos de conexión ───────────────────────────────────────
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    // Mostrar QR como ASCII en los logs para escanear con el celular
+    // Generar QR como PNG y servirlo en el servidor web
     if (qr) {
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-      console.log('📷 ESCANEÁ ESTE QR CON WHATSAPP:')
-      console.log('   WhatsApp → Dispositivos vinculados → Vincular dispositivo')
-      console.log('   ⏰ Expira en 60s — si expira, hacé Redeploy')
-      qrcode.generate(qr, { small: true })
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      try {
+        qrPngBuffer = await QRCode.toBuffer(qr, { scale: 8 })
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        console.log('📷 QR listo — abrí la URL pública del bot en el navegador')
+        console.log('   Luego escaneá con WhatsApp → Dispositivos vinculados → Vincular dispositivo')
+        console.log('   ⏰ Expira en 60s — si expira, refrescá la página')
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      } catch (e) {
+        console.error('Error generando QR:', e.message)
+      }
     }
     if (connection === 'close') {
       const code = lastDisconnect?.error instanceof Boom
