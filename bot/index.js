@@ -22,7 +22,7 @@ import http from 'http'
 
 // ── Config ────────────────────────────────────────────────────────
 const API_URL     = process.env.API_URL    || 'https://complejo-doble-aa-production.up.railway.app'
-const MP_TOKEN    = process.env.MP_ACCESS_TOKEN || ''
+const MP_TOKEN    = (process.env.MP_ACCESS_TOKEN || '').trim()
 const ALIAS_MP    = process.env.ALIAS_MP   || 'complejo.a'
 const TITULAR_MP  = process.env.TITULAR_MP || 'Distriviandas SA'
 const MONTO_SENIA = parseInt(process.env.MONTO_SENIA || '10000')
@@ -189,7 +189,11 @@ async function getDisponibilidad(fecha) {
 }
 
 async function crearLinkPago(jid, hora, cancha, fecha) {
-  if (!MP_TOKEN) return null
+  console.log(`🔗 crearLinkPago llamado — token presente: ${!!MP_TOKEN} (${MP_TOKEN.length} chars)`)
+  if (!MP_TOKEN) {
+    console.log('⚠️  MP_ACCESS_TOKEN vacío — usando fallback alias')
+    return null
+  }
   try {
     const externalRef = `wa_${jid.replace('@s.whatsapp.net', '')}_${hora}_${cancha}`
     const body = {
