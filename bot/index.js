@@ -188,12 +188,55 @@ async function getDisponibilidad(fecha) {
   }
 }
 
-async function verificarPagoMP() {
+async function crearLinkPago(jid, hora, cancha, fecha) {
+  if (!MP_TOKEN) return null
+  try {
+    const externalRef = `wa_${jid.replace('@s.whatsapp.net', '')}_${hora}_${cancha}`
+    const body = {
+      items: [{
+        title: `Seña cancha ${cancha} — ${hora}hs ${formatDateSpanish(fecha)}`,
+        quantity: 1,
+        currency_id: 'ARS',
+        unit_price: MONTO_SENIA
+      }],
+      external_reference: externalRef,
+      statement_descriptor: 'Complejo Doble AA'
+    }
+    const res = await fetch('https://api.mercadopago.com/checkout/preferences', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${MP_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    })
+    const data = await res.json()
+    if (data.init_point) {
+      console.log(`✅ Link de pago creado para ${jid}: ${data.init_point}`)
+      return { url: data.init_point, ref: externalRef }
+    }
+    console.error('Error MP preferences:', JSON.stringify(data))
+    return null
+  } catch (e) {
+    console.error('Error crearLinkPago:', e)
+    return null
+  }
+}
+
+async function verificarPagoMP(externalRef) {
   if (!MP_TOKEN) {
     console.log('⚠️  MP_ACCESS_TOKEN no configurado — aprobando pago automáticamente (modo test)')
     return true
   }
   try {
+    if (externalRef) {
+      const url = `https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(externalRef)}&status=approved`
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${MP_TOKEN}` } })
+      const data = await res.json()
+      console.log(`🔍 Verificando pago por ref ${externalRef}: ${data.results?.length || 0} resultados`)
+      return !!(data.results && data.results.length > 0)
+    }
+    // Fallback por monto si no hay referencia
     const now = new Date()
     const since = new Date(now.getTime() - 6 * 60 * 60 * 1000)
     const url = `https://api.mercadopago.com/v1/payments/search?status=approved&sort=date_created&criteria=desc&range=date_created&begin_date=${since.toISOString()}&end_date=${now.toISOString()}`
@@ -344,13 +387,24 @@ async function handleMessage(sock, msg) {
     session.selectedCancha = cancha
     session.state = 'AWAITING_PAYMENT'
 
-    await send(
-      `✅ *${formatDateSpanish(session.selectedDay)}* — *${hora}hs* — Cancha *${cancha}*\n\n` +
-      `💵 La seña es de *$${MONTO_SENIA.toLocaleString('es-AR')}*\n\n` +
-      `💳 Transferí al alias: *${ALIAS_MP}*\n` +
-      `👤 Titular: ${TITULAR_MP}\n\n` +
-      `Cuando lo hagas, *mandame la captura del comprobante* 📸`
-    )
+    const linkPago = await crearLinkPago(jid, hora, cancha, session.selectedDay)
+    if (linkPago) {
+      session.paymentRef = linkPago.ref
+      await send(
+        `✅ *${formatDateSpanish(session.selectedDay)}* — *${hora}hs* — Cancha *${cancha}*\n\n` +
+        `💵 La seña es de *$${MONTO_SENIA.toLocaleString('es-AR')}*\n\n` +
+        `💳 Pagá la seña acá (tarjeta, débito o saldo MP):\n${linkPago.url}\n\n` +
+        `Cuando pagaste, escribí *"listo"* y verifico automáticamente ✅`
+      )
+    } else {
+      await send(
+        `✅ *${formatDateSpanish(session.selectedDay)}* — *${hora}hs* — Cancha *${cancha}*\n\n` +
+        `💵 La seña es de *$${MONTO_SENIA.toLocaleString('es-AR')}*\n\n` +
+        `💳 Transferí al alias: *${ALIAS_MP}*\n` +
+        `👤 Titular: ${TITULAR_MP}\n\n` +
+        `Cuando lo hagas, *mandame la captura del comprobante* 📸`
+      )
+    }
     return
   }
 
@@ -365,7 +419,7 @@ async function handleMessage(sock, msg) {
     }
 
     await send(`⏳ Verificando el pago con MercadoPago...`)
-    const confirmado = await verificarPagoMP()
+    const confirmado = await verificarPagoMP(session.paymentRef || null)
 
     if (confirmado) {
       session.state = 'AWAITING_NAME'
