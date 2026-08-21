@@ -319,7 +319,7 @@ async function handleMessage(sock, msg) {
 
   // ── SHOWING_AVAILABILITY → elige horario ─────────────────────
   if (session.state === 'SHOWING_AVAILABILITY') {
-    const horaMatch = text.match(/\b(1[7-9]|2[0-3])\s*(hs|h|:00)?\b/)
+    const horaMatch = text.match(/(1[7-9]|2[0-3])(?::00)?\s*(?:hs|horas?|h)?/)
     if (!horaMatch) {
       await send(`No entendí el horario. Escribí algo como *"18hs"* o *"20hs cancha 1"*.`)
       return
