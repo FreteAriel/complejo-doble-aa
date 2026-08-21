@@ -327,7 +327,7 @@ async function handleMessage(sock, msg) {
 
     const hora = parseInt(horaMatch[1])
     const lower = text.toLowerCase()
-    const prefCancha2 = lower.includes('cancha 2') || lower.includes('2')
+    const prefCancha2 = lower.includes('cancha 2') || /cancha\s*2/.test(lower)
 
     const libres = await getDisponibilidad(session.selectedDay)
     const slotsHora = libres?.filter(s => s.hora === hora)
