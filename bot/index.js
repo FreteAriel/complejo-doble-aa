@@ -195,7 +195,7 @@ async function verificarPagoMP() {
   }
   try {
     const now = new Date()
-    const since = new Date(now.getTime() - 40 * 60 * 1000)
+    const since = new Date(now.getTime() - 6 * 60 * 60 * 1000)
     const url = `https://api.mercadopago.com/v1/payments/search?status=approved&sort=date_created&criteria=desc&range=date_created&begin_date=${since.toISOString()}&end_date=${now.toISOString()}`
     const res = await fetch(url, { headers: { Authorization: `Bearer ${MP_TOKEN}` } })
     const data = await res.json()
