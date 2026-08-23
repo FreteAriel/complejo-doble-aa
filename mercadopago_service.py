@@ -1,3 +1,4 @@
+
 """
 Integración con MercadoPago para cobro de señas.
 
@@ -9,11 +10,11 @@ Flujo:
 5. Bot manda mensaje de confirmación al cliente
 
 Configuración en .env (Railway environment variables):
-    MP_ACCESS_TOKEN = tu Access Token de MercadoPago
-    BASE_URL        = URL pública del proyecto en Railway (ej: https://xxx.railway.app)
-    TWILIO_SID      = Account SID de Twilio
-    TWILIO_TOKEN    = Auth Token de Twilio
-    TWILIO_NUMBER   = Número de WhatsApp de Twilio (ej: whatsapp:+14155238886)
+  MP_ACCESS_TOKEN = tu Access Token de MercadoPago
+  BASE_URL        = URL pública del proyecto en Railway (ej: https://xxx.railway.app)
+  TWILIO_SID      = Account SID de Twilio
+  TWILIO_TOKEN    = Auth Token de Twilio
+  TWILIO_NUMBER   = Número de WhatsApp de Twilio (ej: whatsapp:+14155238886)
 """
 
 import os
@@ -26,10 +27,10 @@ from datetime import date
 router = APIRouter()
 
 MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN", "")
-BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
-TWILIO_SID = os.getenv("TWILIO_SID", "")
-TWILIO_TOKEN = os.getenv("TWILIO_TOKEN", "")
-TWILIO_NUMBER = os.getenv("TWILIO_NUMBER", "")
+BASE_URL        = os.getenv("BASE_URL", "http://localhost:8000")
+TWILIO_SID      = os.getenv("TWILIO_SID", "")
+TWILIO_TOKEN    = os.getenv("TWILIO_TOKEN", "")
+TWILIO_NUMBER   = os.getenv("TWILIO_NUMBER", "")
 
 SENIA = 10_000
 DIAS_ES = {0:"lunes",1:"martes",2:"miércoles",3:"jueves",4:"viernes",5:"sábado",6:"domingo"}
@@ -37,17 +38,16 @@ MESES_ESP = {1:"enero",2:"febrero",3:"marzo",4:"abril",5:"mayo",6:"junio",
              7:"julio",8:"agosto",9:"septiembre",10:"octubre",11:"noviembre",12:"diciembre"}
 
 def fmt_fecha(d: date) -> str:
-    return f"{DIAS_ES[d.weekday()]} {d.day} de {MESESEQ}"
+    return f"{DIAS_ES[d.weekday()]} {d.day} de {MESES_ESP[d.month]}"
+
 
 async def crear_link_pago(reserva_id: int, cliente_nombre: str, fecha: str, hora: str, cancha: int) -> str:
     """Crea una preferencia de pago en MercadoPago y devuelve la URL de pago."""
-    token = os.getenv("MP_ACCESS_TOKEN", "").strip()
-    if not token:
-        print("[MP] Sin MP_ACCESS_TOKEN configurado")
+    if not MP_ACCESS_TOKEN:
         return ""
 
     d = date.fromisoformat(fecha)
-    descripcion = f"Senia cancha {cancha} - {fmt_fecha(d)} {hora}hs - Complejo Doble AA"
+    descripcion = f"Seña cancha {cancha} — {fmt_fecha(d)} {hora}hs · Complejo Doble AA"
 
     payload = {
         "items": [{
@@ -64,107 +64,161 @@ async def crear_link_pago(reserva_id: int, cliente_nombre: str, fecha: str, hora
             "pending": f"{BASE_URL}/pago-pendiente"
         },
         "auto_return": "approved",
-        "statement_descriptor": "COMPLEJM�QГHPH���^Y\���ț�[YH���Y[�Wۛ�X��_B�B���N��\�[���]�\�[���Y[�
+        "statement_descriptor": "COMPLEJO DOBLE AA",
+        "payer": {"name": cliente_nombre}
+    }
 
-H\��Y[����\�H]�Z]�Y[����
-��΋��\K�Y\��Y�Y�˘��K��X���]��Y�\�[��\ȋ�XY\��^�]]ܚ^�][ۈ�����X\�\����[�H����۝[�U\H���\X�][ۋڜ�ۈ��K���ۏ\^[�Y�[Y[�]LMB�
-B��[�
-���THܙX\��[���Y���]\Έܙ\˜�]\����_H�B�]HH�\˚��ۊ
-B�Y��\˜�]\����H��[�
-��JN���[�
-���TT��ԗH�]_H�B��]\������[��[���\�\���[����[�]��[���[���X��[ۈ\�\��[�]��[���[��H]K��]
-��[����[�]��[��H܈]K��]
-�[�]��[��H܈���Y���[�΂��[�
-���TH���H[��۝��[�]��[���^\Έ�\�
-]K��^\�
-J_H�B��]\��[�^�\^�\[ۈ\�N���[�
-���TV�TSӗH�_H�B��]\�������KKH[��[�\�H�[�\�\�[��HY��X[�X[Y[�H\�HHY�[�H�X�KKKKKB����]\����
-��\K�\��[�\�\�[[�ȊB�\�[��Y��[�\�\��[��ܙ\�\��J�\]Y\���\]Y\�
-N������[�\�H[�[��HY��T\�H[�H�\�\��H^\�[�K�����]HH]�Z]�\]Y\����ۊ
-B��\�\��W�YH]K��]
-��\�\��W�Y�B�Y����\�\��W�Y���Z\�H^�\[ۊ
-��\�\��W�Y�\]Y\�YȊB���H]�Z]�]��
-B��N��\�[���]��^X�]J��SP�
-����H�\�\��\��T�HYOȋ
-�\�\��W�Y
-JH\��\����H]�Z]�\���]�ۙJ
-B�Y�������Z\�H^�\[ۊ
-
-��\�\��H��[��۝�YH�B��[�[N��]�Z]�����J
-B��[��H]�Z]ܙX\��[���Y����\�\��W�Y\�ȚY�K��Y[�Wۛ�X��O\�Ș�Y[�Wۛ�X��H�K��X�O\�ș�X�H�K�ܘO\���ȚܘH�JK��[��O\�Ș�[��H�B�
-B��Y���[�΂���[�H�˙�][���T�P��T�����S����K���\
+    async with httpx.AsyncClient() as client:
+        res = await client.post(
+            "https://api.mercadopago.com/checkout/preferences",
+            headers={
+                "Authorization": f"Bearer {MP_ACCESS_TOKEN}",
+                "Content-Type": "application/json"
+            },
+            json=payload,
+            timeout=15
+        )
+        data = res.json()
+        # En producción usar "init_point"; en sandbox usar "sandbox_init_point"
+        return data.get("init_point") or data.get("sandbox_init_point") or ""
 
-B�Y�����[����]\��ț�Ȏ��[�K�\��܈���T�P��T�����S����ۙ�Y�\�Yȋ�[�Ȏ���B��]\��ț�Ȏ��[�K�\��܈���\��܈[ܙX\��Y�\�[��XH[�Y\��Y�Y�ˈ�]�\�H\�ܙY[��X[\�[��Z[�^K���[�Ȏ���B���]\��ț�Ȏ��YK�[�Ȏ�[��B��\�[��Y��\�Y�X�\��Y���\
-^[Y[��Y���HO�X��ۙN������ۜ�[HHY\��Y�Y���H[�Y���YH\�ؘYˈ�]ܛ�H[Y����ۙK�����Y���T�P��T�����S����]\���ۙB�\�[���]�\�[���Y[�
 
-H\��Y[����\�H]�Z]�Y[���]
-���΋��\K�Y\��Y�Y�˘��K݌K�^[Y[����^[Y[��YH��XY\��^Ȑ]]ܚ^�][ۈ�����X\�\��TP��T�����S�H�K�[Y[�]LMB�
-B�Y��\˜�]\����HOH����]\���ۙB��]\���\˚��ۊ
-B��\�[��Y�[��X\���]�\
-Έ��Y[��Z�N���N�����[���XH[�Y[��Z�HH�]�\�XH�[[ˈ����Y����SS���Q܈���SS����S����]\���\�[���]�\�[���Y[�
+async def verificar_pago_mp(payment_id: str) -> dict | None:
+    """Consulta a MercadoPago si un pago fue aprobado. Retorna el pago o None."""
+    if not MP_ACCESS_TOKEN:
+        return None
+    async with httpx.AsyncClient() as client:
+        res = await client.get(
+            f"https://api.mercadopago.com/v1/payments/{payment_id}",
+            headers={"Authorization": f"Bearer {MP_ACCESS_TOKEN}"},
+            timeout=15
+        )
+        if res.status_code != 200:
+            return None
+        return res.json()
 
-H\��Y[���]�Z]�Y[����
-���΋��\K��[[˘��ǨLL
-LK�X���[�����SS���QK�Y\��Y�\˚��ۈ��]]J�SS���Q�SS����S�K�]O^����H���SS�ӕSP�T���Ȏ����]�\���H�Y���˜�\���]
-��]�\��H[�H�����H��Y[��Z�B�K�[Y[�]LMB�
-B���KKH�X����HY\��Y�Y��KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKB����]\����
-���X�����Y\��Y�Y�ȊB�\�[��Y�Y\��Y�Y����X�����\]Y\���\]Y\�
-N�����Y\��Y�Y��[XHH\�H[��[��X[���H���\�H[�Y�ˈ�����N����HH]�Z]�\]Y\����ۊ
-B�^�\^�\[ێ����HH�B��\�H��K��]
-�\H�H܈��K��]
-��XȊB�Y�\���[�
-�^[Y[���Y\��[��ܙ\��N���]\���\�ۜ�J�]\����OL�
-B��]W�YH��K��]
-�]H��JK��]
-�Y�H܈��K��]
-�Y�B�Y���]W�Y���]\���\�ۜ�J�]\����OL�
-B��Y��H]�Z]�\�Y�X�\��Y���\
-��]W�Y
-JB�Y���Y�΂��]\���\�ۜ�J�]\����OL�
-B��\�Y��Y��HY�˙�]
-��]\ȊB��\�\��W�YHY�˙�]
-�^\��[ܙY�\�[��H�B�[۝�HY�˙�]
-��[��X�[ۗ�[[�[��
-B��Y�\�Y��Y��OH�\�ݙY�܈���\�\��W�Y���]\���\�ۜ�J�]\����OL�
-B���H]�Z]�]��
-B��N��\�[���]��^X�]J���SP�
-����H�\�\��\��T�HYOȋ
-�\�\��W�Y
-B�
-H\��\����\�\��HH]�Z]�\���]�ۙJ
-B��Y����\�\��N���]\���\�ۜ�J�]\����OL�
-B��]�Z]��^X�]J����TUH�\�\��\��U\�Y�I��[�Y��[۝���[�XOO���\�B���ST��[��\�	��H	��[�XHTY���YI���T�HYOȈ���
-��]
-[۝�K��]W�Y
-K�\�\��W�Y
-B�
-B�]�Z]����[Z]
 
-B��\�[���]��^X�]J���SP�[Y�ۛ����H�Y[�\��T�HYOȋ
-�\�\��VȘ�Y[�W�Y�K
-B�
-H\��\����H]�Z]�\���]�ۙJ
-B�[Y�ۛ�H�ȝ[Y�ۛȗHY��[�H�ۙB��Y�[Y�ۛ΂�H]K����Z\�ٛܛX]
-�\�\��Vș�X�H�JB���X��HH�\�\��VȘ�Y[�Wۛ�X��H�K��]
+async def enviar_whatsapp(to: str, mensaje: str):
+    """Envía un mensaje de WhatsApp via Twilio."""
+    if not TWILIO_SID or not TWILIO_TOKEN:
+        return
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_SID}/Messages.json",
+            auth=(TWILIO_SID, TWILIO_TOKEN),
+            data={
+                "From": TWILIO_NUMBER,
+                "To": f"whatsapp:{to}" if not to.startswith("whatsapp:") else to,
+                "Body": mensaje
+            },
+            timeout=15
+        )
 
-V�K�]J
-B�\��H
-����!H
-��T�[�XH�ۙ�\�XYKۛ�X��_HJ�������'��H[�\��\�\��YΗ�����8��ܙ\�\��V��ܘI�_Z������8��H�[��Hܙ\�\��V���[��I�_W�����<'��ٛ]ٙX�J
-K��\][^�J
-_W������'��[�X\�H�ۈ
-��[�
-[۝�N�J��������QܘX�X\�H\�\�[[��H<'��{�#�����\Z��؛HPJ���
-B�]�Z][��X\���]�\
-[Y�ۛ�\��B���[�[N��]�Z]�����J
-B���]\���\�ۜ�J�]\����OL�
-B���KKH0�Y�[�\�H�]ܛ��HY\��Y�Y��KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKB����]\���]
-��Y��Y^]��ȊB�\�[��Y�Y���^]���
-N���]\���\�ۜ�J��۝[�H�[���H�[OIٛ۝Y�[Z[N��[��\�\�Y��^X[Yێ��[�\��Y[�΍	ψ������!H0�TY���X�X�Y�O�������H�[�XH�YH���\�YH�ܜ�X�[Y[�K��X�X�\�\�[�Y[��Z�HH�]�\�ۈH�ۙ�\�XX�[ۋ���������ۙϐ��\Z��؛HPO���ۙϏ��؛�O��[���YYXW�\OH�^�[��
-B����]\���]
-��Y��Y�[YȊB�\�[��Y�Y��٘[Y�
-N���]\���\�ۜ�J��۝[�H�[���H�[OIٛ۝Y�[Z[N��[��\�\�Y��^X[Yێ��[�\��Y[�΍	ψ������c[Y����Y����\�\��O�������܈�]�܈[�[�0�H�Y]�[Y[�H��۝X�]H�ۈ�������܈�]�\���������ۙϐ��\Z��؛HPO���ۙϏ��؛�O��[���YYXW�\OH�^�[��
-B����]\���]
-��Y��\[�Y[�H�B�\�[��Y�Y���[�Y[�J
-N���]\���\�ۜ�J��۝[�H�[���H�[OIٛ۝Y�[Z[N��[��\�\�Y��^X[Yێ��[�\��Y[�΍	ψ��������Y��[����\���������HY��\�0�H�Y[���\�Y�X�YˈH]�\�\�[[��܈�]�\�X[���H�ۙ�\�YK���������ۙϐ��\Z��؛HPO���ۙϏ��؛�O��[���YYXW�\OH�^�[��
-B
+
+# ─── Webhook de MercadoPago ───────────────────────────────────────────────────
+
+@router.post("/webhook/mercadopago")
+async def mercadopago_webhook(request: Request):
+    """MercadoPago llama a este endpoint cuando se procesa un pago."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    tipo = body.get("type") or body.get("topic")
+    if tipo not in ("payment", "merchant_order"):
+        return Response(status_code=200)
+
+    data_id = body.get("data", {}).get("id") or body.get("id")
+    if not data_id:
+        return Response(status_code=200)
+
+    # Obtener detalles del pago
+    pago = await verificar_pago_mp(str(data_id))
+    if not pago:
+        return Response(status_code=200)
+
+    estado_pago = pago.get("status")
+    reserva_id  = pago.get("external_reference")
+    monto       = pago.get("transaction_amount", 0)
+
+    if estado_pago != "approved" or not reserva_id:
+        return Response(status_code=200)
+
+    # Actualizar reserva en la base de datos
+    db = await get_db()
+    try:
+        async with db.execute(
+            "SELECT * FROM reservas WHERE id=?", (reserva_id,)
+        ) as cur:
+            reserva = await cur.fetchone()
+
+        if not reserva:
+            return Response(status_code=200)
+
+        await db.execute(
+            """UPDATE reservas SET estado='señado', monto_senia=?, notas=
+               COALESCE(notas,'') || ' | Seña MP pago_id=' || ? WHERE id=?""",
+            (float(monto), str(data_id), reserva_id)
+        )
+        await db.commit()
+
+        # Recuperar número de WhatsApp del cliente
+        async with db.execute(
+            "SELECT telefono FROM clientes WHERE id=?", (reserva["cliente_id"],)
+        ) as cur:
+            cl = await cur.fetchone()
+        telefono = cl["telefono"] if cl else None
+
+        # Mandar mensaje de confirmación al cliente
+        if telefono:
+            d = date.fromisoformat(reserva["fecha"])
+            nombre = reserva["cliente_nombre"].split()[0].title()  # primer nombre
+            msg = (
+                f"✅ *¡Seña confirmada, {nombre}!*\n\n"
+                f"📅 Tenés reservado:\n"
+                f"   ⏰ {reserva['hora']}hs\n"
+                f"   ⚽ Cancha {reserva['cancha']}\n"
+                f"   📆 {fmt_fecha(d).capitalize()}\n\n"
+                f"💰 Señaste con *${int(monto):,}*\n\n"
+                f"¡Gracias, te esperamos! 🏟️\n*Complejo Doble AA*"
+            )
+            await enviar_whatsapp(telefono, msg)
+
+    finally:
+        await db.close()
+
+    return Response(status_code=200)
+
+
+# ─── Páginas de retorno de MercadoPago ───────────────────────────────────────
+
+@router.get("/pago-exitoso")
+async def pago_exitoso():
+    return Response(
+        content="<html><body style='font-family:sans-serif;text-align:center;padding:40px'>"
+                "<h2>✅ ¡Pago recibido!</h2>"
+                "<p>Tu seña fue procesada correctamente. Recibirás un mensaje de WhatsApp con la confirmación.</p>"
+                "<p><strong>Complejo Doble AA</strong></p></body></html>",
+        media_type="text/html"
+    )
+
+@router.get("/pago-fallido")
+async def pago_fallido():
+    return Response(
+        content="<html><body style='font-family:sans-serif;text-align:center;padding:40px'>"
+                "<h2>❌ El pago no pudo procesarse</h2>"
+                "<p>Por favor intentá nuevamente o contactate con nosotros por WhatsApp.</p>"
+                "<p><strong>Complejo Doble AA</strong></p></body></html>",
+        media_type="text/html"
+    )
+
+@router.get("/pago-pendiente")
+async def pago_pendiente():
+    return Response(
+        content="<html><body style='font-family:sans-serif;text-align:center;padding:40px'>"
+                "<h2>⏳ Pago en proceso</h2>"
+                "<p>Tu pago está siendo verificado. Te avisaremos por WhatsApp cuando se confirme.</p>"
+                "<p><strong>Complejo Doble AA</strong></p></body></html>",
+        media_type="text/html"
+    )
