@@ -1,9 +1,9 @@
 """
 Bot de WhatsApp — Complejo Doble AA
-Tecnología: Twilio WhatsApp API + FastAPI webhook
+Tecnología: Green API (WhatsApp propio) + FastAPI webhook
 
 Flujo de conversación:
-  Cliente escribe → bot interpreta la intención → responde automáticamente
+  Cliente escribe → Green API notifica al webhook → bot interpreta la intención → responde
 
 Intenciones reconocidas:
   - consulta de disponibilidad: "¿hay cancha el sábado a las 20?"
@@ -14,6 +14,7 @@ Intenciones reconocidas:
 
 import re
 import os
+import httpx
 from datetime import date, timedelta
 from fastapi import APIRouter, Request, Form, Response
 from database import get_db
@@ -171,13 +172,25 @@ MESES_ESP = {1:"enero",2:"febrero",3:"marzo",4:"abril",5:"mayo",6:"junio",
 def fmt_fecha(d: date) -> str:
     return f"{DIAS_ES_INV[d.weekday()]} {d.day} de {MESES_ESP[d.month]}"
 
-def twiml_response(texto: str) -> Response:
-    """Genera la respuesta en formato TwiML para Twilio."""
-    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Message>{texto}</Message>
-</Response>"""
-    return Response(content=xml, media_type="application/xml")
+
+# ─── Green API: enviar mensaje ────────────────────────────────────────────────
+
+async def enviar_mensaje_greenapi(chat_id: str, texto: str) -> None:
+    """Envía un mensaje de WhatsApp usando Green API."""
+    instance_id = os.getenv("GREENAPI_INSTANCE_ID", "").strip()
+    token = os.getenv("GREENAPI_TOKEN", "").strip()
+    if not instance_id or not token:
+        print("[GreenAPI] Faltan GREENAPI_INSTANCE_ID o GREENAPI_TOKEN")
+        return
+    url = f"https://api.green-api.com/waInstance{instance_id}/sendMessage/{token}"
+    payload = {"chatId": chat_id, "message": texto}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.post(url, json=payload)
+        print(f"[GreenAPI] sendMessage status={res.status_code} chat={chat_id}")
+    except Exception as e:
+        print(f"[GreenAPI] Error enviando mensaje: {e}")
+
 
 async def procesar_mensaje(body: str, from_number: str) -> str:
     """Lógica central del bot. Retorna el texto a responder."""
@@ -246,7 +259,7 @@ async def procesar_mensaje(body: str, from_number: str) -> str:
             return (
                 f"😔 Lo sentimos, el *{fmt_fecha(fecha)} a las {hora}hs* está ocupado.\n\n"
                 "¿Querés que te muestre los horarios disponibles para ese día?\n"
-                "Respondé: «*¿Qué hay el {fmt_fecha(fecha)}?*»"
+                f"Respondé: «*¿Qué hay el {fmt_fecha(fecha)}?*»"
             )
 
         canchas_libres = [s["cancha"] for s in libres]
@@ -261,14 +274,10 @@ async def procesar_mensaje(body: str, from_number: str) -> str:
 
         cancha_elegida = cancha if (cancha and cancha in canchas_libres) else canchas_libres[0]
 
-        # Pedir el nombre si no lo tenemos en DB
-        # Por simplicidad del bot, usamos el número de WhatsApp como identificador
-        # y pedimos el nombre en el primer contacto
         nombre_cliente = f"Cliente WA {from_number[-8:]}"
 
         reserva_id, ok = await crear_reserva_bot(fecha, hora, cancha_elegida, nombre_cliente)
         if ok:
-            # Intentar generar link de MercadoPago
             try:
                 from mercadopago_service import crear_link_pago
                 link_pago = await crear_link_pago(
@@ -331,7 +340,63 @@ async def procesar_mensaje(body: str, from_number: str) -> str:
     )
 
 
-# ─── Webhook de Twilio ────────────────────────────────────────────────────────
+# ─── Webhook de Green API ─────────────────────────────────────────────────────
+
+@router.post("/webhook/greenapi")
+async def greenapi_webhook(request: Request):
+    """
+    Green API llama a este endpoint cuando llega un mensaje de WhatsApp.
+    Formato JSON esperado:
+    {
+      "typeWebhook": "incomingMessageReceived",
+      "messageData": {
+        "typeMessage": "textMessage",
+        "textMessageData": {"textMessage": "..."}
+      },
+      "senderData": {"sender": "5491112345678@c.us"}
+    }
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return {"status": "ignored", "reason": "invalid JSON"}
+
+    # Solo procesar mensajes de texto entrantes
+    type_webhook = data.get("typeWebhook", "")
+    if type_webhook != "incomingMessageReceived":
+        return {"status": "ignored", "reason": f"typeWebhook={type_webhook}"}
+
+    message_data = data.get("messageData", {})
+    type_message = message_data.get("typeMessage", "")
+    if type_message != "textMessage":
+        return {"status": "ignored", "reason": f"typeMessage={type_message}"}
+
+    text_data = message_data.get("textMessageData", {})
+    body = text_data.get("textMessage", "").strip()
+
+    sender_data = data.get("senderData", {})
+    from_number = sender_data.get("sender", "")  # ej: "5491112345678@c.us"
+
+    if not body or not from_number:
+        return {"status": "ignored", "reason": "empty body or sender"}
+
+    print(f"[GreenAPI] Mensaje de {from_number}: {body[:80]}")
+
+    respuesta = await procesar_mensaje(body, from_number)
+    await enviar_mensaje_greenapi(from_number, respuesta)
+
+    return {"status": "ok"}
+
+
+# ─── Webhook de Twilio (mantenido como respaldo) ──────────────────────────────
+
+def twiml_response(texto: str) -> Response:
+    """Genera la respuesta en formato TwiML para Twilio."""
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>{texto}</Message>
+</Response>"""
+    return Response(content=xml, media_type="application/xml")
 
 @router.post("/webhook/whatsapp")
 async def whatsapp_webhook(
