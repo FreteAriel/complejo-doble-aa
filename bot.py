@@ -182,7 +182,7 @@ async def enviar_mensaje_greenapi(chat_id: str, texto: str) -> None:
     if not instance_id or not token:
         print("[GreenAPI] Faltan GREENAPI_INSTANCE_ID o GREENAPI_TOKEN")
         return
-    url = f"https://api.green-api.com/waInstance{instance_id}/sendMessage/{token}"
+    url = f"https://7107.api.greenapi.com/waInstance{instance_id}/sendMessage/{token}"
     payload = {"chatId": chat_id, "message": texto}
     try:
         async with httpx.AsyncClient(timeout=10) as client:
